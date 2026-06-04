@@ -156,26 +156,6 @@ class AppState extends State<AppStateWrapper> {
     _startRefreshTimer();
   }
 
-  void loginMock({
-    required String email,
-    required String fullName,
-    required String dateOfBirth,
-    required String address,
-    required String phoneNumber,
-  }) {
-    setState(() {
-      currentUser = UserProfile(
-        email: email,
-        fullName: fullName,
-        dateOfBirth: dateOfBirth,
-        address: address,
-        phoneNumber: phoneNumber,
-      );
-      isLoggedIn = true;
-      _resetChatState();
-    });
-  }
-
   Future<void> logout() async {
     if (isLoggingOut) return;
 

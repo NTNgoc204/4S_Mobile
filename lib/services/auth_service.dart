@@ -44,6 +44,149 @@ class AuthService {
     return _apiClient.refreshAccessToken();
   }
 
+  Future<void> registerStep1({
+    required String email,
+    required String fullName,
+    required String dateOfBirth,
+    required String address,
+    required String phoneNumber,
+    String gender = 'Other',
+  }) async {
+    // Normalize dateOfBirth to ISO 8601 UTC (backend expects a DateTime string like 2026-06-04T16:31:17.420Z)
+    String dobPayload = dateOfBirth;
+    try {
+      final parsed = DateTime.parse(dateOfBirth);
+      dobPayload = parsed.toUtc().toIso8601String();
+    } catch (_) {
+      // keep original if parsing fails
+    }
+
+    await _apiClient.dio.post<void>(
+      '/api/auth/register-step1',
+      data: {
+        'email': email,
+        'fullName': fullName,
+        'dateOfBirth': dobPayload,
+        'address': address,
+        'phoneNumber': phoneNumber,
+        'gender': gender,
+      },
+      options: Options(
+        extra: const {
+          ApiClient.skipAuthRefreshKey: true,
+          ApiClient.skipAuthHeaderKey: true,
+        },
+      ),
+    );
+  }
+
+  Future<String> verifyRegisterOtp({
+    required String email,
+    required String otp,
+  }) async {
+    final response = await _apiClient.dio.post<Map<String, dynamic>>(
+      '/api/auth/verify-otp',
+      data: {'email': email, 'otp': otp},
+      options: Options(
+        extra: const {
+          ApiClient.skipAuthRefreshKey: true,
+          ApiClient.skipAuthHeaderKey: true,
+        },
+      ),
+    );
+
+    final verifyToken = response.data?['verifyToken'] as String?;
+    if (verifyToken == null || verifyToken.isEmpty) {
+      throw StateError('No verify token received from server');
+    }
+    return verifyToken;
+  }
+
+  Future<void> registerStep3({
+    required String verifyToken,
+    required String password,
+  }) async {
+    // Backend expects lowercase keys: verifyToken, password
+    final payload = {'verifyToken': verifyToken, 'password': password};
+    // Debug: log payload
+    // ignore: avoid_print
+    print('AuthService.registerStep3 payload: \\$payload');
+    try {
+      await _apiClient.dio.post<void>(
+        '/api/auth/register-step3',
+        data: payload,
+        options: Options(
+          extra: const {
+            ApiClient.skipAuthRefreshKey: true,
+            ApiClient.skipAuthHeaderKey: true,
+          },
+        ),
+      );
+    } catch (err) {
+      // Log detailed Dio error for server diagnostics
+      // ignore: avoid_print
+      if (err is DioException) {
+        final resp = err.response;
+        // ignore: avoid_print
+        print(
+          'AuthService.registerStep3 DioException: status=${resp?.statusCode}',
+        );
+        // ignore: avoid_print
+        print('AuthService.registerStep3 response.data: ${resp?.data}');
+        // ignore: avoid_print
+        print('AuthService.registerStep3 response.headers: ${resp?.headers}');
+        // ignore: avoid_print
+        print(
+          'AuthService.registerStep3 request payload: ${err.requestOptions.data}',
+        );
+      } else {
+        // ignore: avoid_print
+        print('AuthService.registerStep3 error: $err');
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> forgotPassword(String email) async {
+    await _apiClient.dio.post<void>(
+      '/api/Auth/forgot-password',
+      data: {'email': email},
+      options: Options(
+        extra: const {
+          ApiClient.skipAuthRefreshKey: true,
+          ApiClient.skipAuthHeaderKey: true,
+        },
+      ),
+    );
+  }
+
+  Future<void> resetPassword({
+    required String email,
+    required String otp,
+    required String newPassword,
+  }) async {
+    await _apiClient.dio.post<void>(
+      '/api/Auth/reset-password',
+      data: {'email': email, 'otp': otp, 'newPassword': newPassword},
+      options: Options(
+        extra: const {
+          ApiClient.skipAuthRefreshKey: true,
+          ApiClient.skipAuthHeaderKey: true,
+        },
+      ),
+    );
+  }
+
+  Future<void> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    await _apiClient.dio.put<void>(
+      '/api/Auth/change-password',
+      data: {'oldPassword': oldPassword, 'newPassword': newPassword},
+    );
+  }
+
   Future<UserProfile> getMe() async {
     final response = await _apiClient.dio.get<Map<String, dynamic>>(
       '/api/Auth/me',
@@ -119,7 +262,7 @@ class AuthService {
         return 'Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.';
       }
       if (error.response?.statusCode == 400) {
-        return 'Email hoặc mật khẩu không chính xác.';
+        return 'Thông tin gửi lên không hợp lệ. Vui lòng kiểm tra lại.';
       }
     }
 

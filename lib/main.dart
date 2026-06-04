@@ -5,6 +5,7 @@ import 'models/chat.dart';
 import 'models/university.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
+import 'services/auth_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -27,8 +28,13 @@ class AppStateWrapper extends StatefulWidget {
 }
 
 class AppState extends State<AppStateWrapper> {
+  final AuthService _authService = AuthService.instance;
+  Timer? _refreshTimer;
+
   UserProfile? currentUser;
   bool isLoggedIn = false;
+  bool isAuthInitializing = true;
+  bool isLoggingOut = false;
 
   // AI Chat states
   final List<ChatMessage> chatMessages = [];
@@ -58,7 +64,8 @@ class AppState extends State<AppStateWrapper> {
 
   static AppState of(BuildContext context, {bool listen = true}) {
     if (listen) {
-      final AppProvider? provider = context.dependOnInheritedWidgetOfExactType<AppProvider>();
+      final AppProvider? provider = context
+          .dependOnInheritedWidgetOfExactType<AppProvider>();
       assert(provider != null, 'No AppProvider found in context');
       return provider!.state;
     } else {
@@ -72,6 +79,46 @@ class AppState extends State<AppStateWrapper> {
   void initState() {
     super.initState();
     _resetChatState();
+    _initializeAuth();
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initializeAuth() async {
+    await _authService.init(onSessionExpired: _handleSessionExpired);
+
+    final restoredUser = await _authService.restoreSession();
+    if (!mounted) return;
+
+    setState(() {
+      currentUser = restoredUser;
+      isLoggedIn = restoredUser != null;
+      isAuthInitializing = false;
+      if (restoredUser != null) {
+        _resetChatState();
+      }
+    });
+
+    if (restoredUser != null) {
+      _startRefreshTimer();
+    }
+  }
+
+  Future<void> _handleSessionExpired() async {
+    _refreshTimer?.cancel();
+    if (!mounted) return;
+
+    setState(() {
+      currentUser = null;
+      isLoggedIn = false;
+      isLoggingOut = false;
+      isQuizCompleted = false;
+      _resetChatState();
+    });
   }
 
   void _resetChatState() {
@@ -80,7 +127,8 @@ class AppState extends State<AppStateWrapper> {
       ChatMessage(
         id: 'welcome',
         role: 'assistant',
-        content: 'Xin chào! Tôi là Trợ lý Hướng nghiệp AI 4S. Tôi có thể giúp bạn tìm ngành học, trường phù hợp, hoặc giải đáp thắc mắc về định hướng tương lai. Bạn muốn bắt đầu từ điều gì?',
+        content:
+            'Xin chào! Tôi là Trợ lý Hướng nghiệp AI 4S. Tôi có thể giúp bạn tìm ngành học, trường phù hợp, hoặc giải đáp thắc mắc về định hướng tương lai. Bạn muốn bắt đầu từ điều gì?',
         kind: 'welcome',
       ),
     );
@@ -91,7 +139,24 @@ class AppState extends State<AppStateWrapper> {
   }
 
   // Authentication Actions
-  void login({
+  Future<void> loginWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    final profile = await _authService.login(email: email, password: password);
+
+    if (!mounted) return;
+
+    setState(() {
+      currentUser = profile;
+      isLoggedIn = true;
+      isQuizCompleted = false;
+      _resetChatState();
+    });
+    _startRefreshTimer();
+  }
+
+  void loginMock({
     required String email,
     required String fullName,
     required String dateOfBirth,
@@ -111,12 +176,41 @@ class AppState extends State<AppStateWrapper> {
     });
   }
 
-  void logout() {
+  Future<void> logout() async {
+    if (isLoggingOut) return;
+
+    setState(() {
+      isLoggingOut = true;
+    });
+
+    _refreshTimer?.cancel();
+    await _authService.logout();
+
+    if (!mounted) return;
+
     setState(() {
       currentUser = null;
       isLoggedIn = false;
+      isLoggingOut = false;
       isQuizCompleted = false;
       _resetChatState();
+    });
+  }
+
+  String getAuthErrorMessage(Object error) {
+    return _authService.getErrorMessage(error);
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(minutes: 12), (_) async {
+      if (!isLoggedIn) return;
+
+      try {
+        await _authService.refreshAccessToken();
+      } catch (_) {
+        await _handleSessionExpired();
+      }
     });
   }
 
@@ -124,6 +218,15 @@ class AppState extends State<AppStateWrapper> {
   void updateUserProfile(UserProfile profile) {
     setState(() {
       currentUser = profile;
+    });
+  }
+
+  Future<void> uploadAvatar(String filePath) async {
+    final avatarUrl = await _authService.uploadAvatar(filePath);
+    if (!mounted || currentUser == null) return;
+
+    setState(() {
+      currentUser = currentUser!.copyWith(avatarUrl: avatarUrl);
     });
   }
 
@@ -202,20 +305,29 @@ class AppState extends State<AppStateWrapper> {
           final keys = _getSchoolStrengthKeys(topSchool);
           final strengths = keys.map((k) => focusLabelsVi[k] ?? k).join(' và ');
 
-          aiResponse = '${topSchool.name["vi"]} là lựa chọn phù hợp nhất với hồ sơ hiện tại của bạn. Trường nổi bật ở nhóm ${topSchool.major["vi"]}. Khu vực: ${topSchool.place["vi"]}. Mức học phí tham khảo: ${topSchool.tuition["vi"]}. Dựa trên các tín hiệu bạn đã cung cấp, mức độ tương thích cao nhất nằm ở nhóm $strengths.';
+          aiResponse =
+              '${topSchool.name["vi"]} là lựa chọn phù hợp nhất với hồ sơ hiện tại của bạn. Trường nổi bật ở nhóm ${topSchool.major["vi"]}. Khu vực: ${topSchool.place["vi"]}. Mức học phí tham khảo: ${topSchool.tuition["vi"]}. Dựa trên các tín hiệu bạn đã cung cấp, mức độ tương thích cao nhất nằm ở nhóm $strengths.';
         } else {
           // Free text custom keyword matching
           final textLower = text.toLowerCase();
           if (textLower.contains('it') || textLower.contains('công nghệ')) {
-            aiResponse = 'Tôi ghi nhận bạn quan tâm đến công nghệ và máy tính. ĐH Bách Khoa TP.HCM (HCMUT) và ĐH Bách Khoa Hà Nội (HUST) là hai gợi ý hàng đầu về khối kỹ thuật - công nghệ với mức độ tương thích của bạn tăng lên đáng kể.';
-          } else if (textLower.contains('học phí') || textLower.contains('tiền')) {
-            aiResponse = 'Mức học phí tham khảo của các trường công như ĐH Bách Khoa (HCMUT) khoảng 15-25 triệu/học kỳ, trong khi RMIT Việt Nam có học phí từ 70-95 triệu/học kỳ. Bạn có thể xem chi tiết ở khay trường đề xuất ngay phía dưới.';
-          } else if (textLower.contains('hồ chí minh') || textLower.contains('hcm')) {
-            aiResponse = 'Tại TP.HCM, ĐH Bách Khoa TP.HCM (HCMUT) và RMIT Việt Nam là những lựa chọn được sinh viên đánh giá tốt nhất. Bạn có muốn xem thêm chi tiết học phí của hai trường này không?';
-          } else if (textLower.contains('kinh doanh') || textLower.contains('kinh tế')) {
-            aiResponse = 'Đối với khối kinh doanh và thị trường, ĐH Ngoại Thương (FTU) là lựa chọn cực kỳ uy tín. RMIT cũng rất nổi bật về Quản trị Kinh doanh và Marketing.';
+            aiResponse =
+                'Tôi ghi nhận bạn quan tâm đến công nghệ và máy tính. ĐH Bách Khoa TP.HCM (HCMUT) và ĐH Bách Khoa Hà Nội (HUST) là hai gợi ý hàng đầu về khối kỹ thuật - công nghệ với mức độ tương thích của bạn tăng lên đáng kể.';
+          } else if (textLower.contains('học phí') ||
+              textLower.contains('tiền')) {
+            aiResponse =
+                'Mức học phí tham khảo của các trường công như ĐH Bách Khoa (HCMUT) khoảng 15-25 triệu/học kỳ, trong khi RMIT Việt Nam có học phí từ 70-95 triệu/học kỳ. Bạn có thể xem chi tiết ở khay trường đề xuất ngay phía dưới.';
+          } else if (textLower.contains('hồ chí minh') ||
+              textLower.contains('hcm')) {
+            aiResponse =
+                'Tại TP.HCM, ĐH Bách Khoa TP.HCM (HCMUT) và RMIT Việt Nam là những lựa chọn được sinh viên đánh giá tốt nhất. Bạn có muốn xem thêm chi tiết học phí của hai trường này không?';
+          } else if (textLower.contains('kinh doanh') ||
+              textLower.contains('kinh tế')) {
+            aiResponse =
+                'Đối với khối kinh doanh và thị trường, ĐH Ngoại Thương (FTU) là lựa chọn cực kỳ uy tín. RMIT cũng rất nổi bật về Quản trị Kinh doanh và Marketing.';
           } else {
-            aiResponse = 'Cảm ơn bạn đã trò chuyện. Free-text chat hiện đang ở chế độ demo và hỗ trợ tư vấn các khối ngành IT, Kinh tế, Thiết kế, hoặc thông tin học phí tại TP.HCM. Bạn có thể chọn một chủ đề gợi ý nhanh ở trên để có phản hồi chi tiết.';
+            aiResponse =
+                'Cảm ơn bạn đã trò chuyện. Free-text chat hiện đang ở chế độ demo và hỗ trợ tư vấn các khối ngành IT, Kinh tế, Thiết kế, hoặc thông tin học phí tại TP.HCM. Bạn có thể chọn một chủ đề gợi ý nhanh ở trên để có phản hồi chi tiết.';
           }
         }
 
@@ -225,7 +337,9 @@ class AppState extends State<AppStateWrapper> {
             id: 'assistant-${DateTime.now().millisecondsSinceEpoch}',
             role: 'assistant',
             content: aiResponse,
-            kind: isPreset ? 'assistant_recommendation_detail' : 'assistant_demo',
+            kind: isPreset
+                ? 'assistant_recommendation_detail'
+                : 'assistant_demo',
             schoolId: targetSchoolId,
           ),
         );
@@ -261,8 +375,56 @@ class AppState extends State<AppStateWrapper> {
           ),
           fontFamily: 'sans-serif',
         ),
-        home: isLoggedIn ? const MainNavigationScreen() : const LoginScreen(),
+        builder: (context, child) {
+          return _KeyboardDismissOnTap(child: child ?? const SizedBox.shrink());
+        },
+        home: isAuthInitializing
+            ? const _AuthLoadingScreen()
+            : isLoggedIn
+            ? const MainNavigationScreen()
+            : const LoginScreen(),
       ),
+    );
+  }
+}
+
+class _KeyboardDismissOnTap extends StatelessWidget {
+  const _KeyboardDismissOnTap({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (event) {
+        final currentFocus = FocusManager.instance.primaryFocus;
+        final focusContext = currentFocus?.context;
+        final renderObject = focusContext?.findRenderObject();
+
+        if (renderObject is RenderBox) {
+          final offset = renderObject.localToGlobal(Offset.zero);
+          final focusedRect = offset & renderObject.size;
+          if (focusedRect.contains(event.position)) {
+            return;
+          }
+        }
+
+        currentFocus?.unfocus();
+      },
+      child: child,
+    );
+  }
+}
+
+class _AuthLoadingScreen extends StatelessWidget {
+  const _AuthLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF081326),
+      body: Center(child: CircularProgressIndicator(color: Color(0xFFECC741))),
     );
   }
 }
@@ -270,11 +432,7 @@ class AppState extends State<AppStateWrapper> {
 class AppProvider extends InheritedWidget {
   final AppState state;
 
-  const AppProvider({
-    super.key,
-    required this.state,
-    required super.child,
-  });
+  const AppProvider({super.key, required this.state, required super.child});
 
   @override
   bool updateShouldNotify(AppProvider oldWidget) {

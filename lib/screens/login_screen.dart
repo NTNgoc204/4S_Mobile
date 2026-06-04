@@ -32,37 +32,17 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
 
-    // Simulate API call matching backend delay
-    await Future.delayed(const Duration(milliseconds: 1000));
-
-    if (!mounted) return;
-
     final appState = AppState.of(context, listen: false);
     final email = _emailController.text.trim().toLowerCase();
     final password = _passwordController.text;
 
-    // Standard login validation or demo user login
-    if (email == 'demo@4s.com' && password == '123456') {
-      appState.login(
-        email: email,
-        fullName: 'Nguyễn Văn Demo',
-        dateOfBirth: '2008-10-12',
-        address: 'Hồ Chí Minh, Việt Nam',
-        phoneNumber: '0987654321',
-      );
-    } else if (password.length >= 6) {
-      // Allow any user with password >= 6 characters for ease of testing
-      appState.login(
-        email: email,
-        fullName: email.split('@')[0].toUpperCase(),
-        dateOfBirth: '2008-01-01',
-        address: 'TP. Hồ Chí Minh',
-        phoneNumber: '0912345678',
-      );
-    } else {
+    try {
+      await appState.loginWithPassword(email: email, password: password);
+    } catch (error) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Email hoặc mật khẩu không chính xác (mật khẩu phải từ 6 ký tự).';
+        _errorMessage = appState.getAuthErrorMessage(error);
       });
     }
   }
@@ -84,7 +64,10 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 16.0,
+              ),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -94,14 +77,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     // Brand Logo Area
                     Center(
                       child: Container(
-                        height: 76,
-                        width: 76,
+                        height: 84,
+                        width: 84,
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFFE16D), Color(0xFFDEB320)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
@@ -111,10 +91,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.explore,
-                          size: 40,
-                          color: Color(0xFF0F1E36),
+                        child: Image.asset(
+                          'assets/images/logo-4s.png',
+                          fit: BoxFit.contain,
                         ),
                       ),
                     ),
@@ -135,10 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Text(
                       'Đăng nhập để tiếp tục lộ trình định hướng',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.white70,
-                      ),
+                      style: TextStyle(fontSize: 15, color: Colors.white70),
                     ),
                     const SizedBox(height: 32),
 
@@ -149,11 +125,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: BoxDecoration(
                           color: Colors.redAccent.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                          border: Border.all(
+                            color: Colors.redAccent.withOpacity(0.3),
+                          ),
                         ),
                         child: Text(
                           _errorMessage!,
-                          style: const TextStyle(color: Color(0xFFFF8A8A), fontSize: 14),
+                          style: const TextStyle(
+                            color: Color(0xFFFF8A8A),
+                            fontSize: 14,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -163,7 +144,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     // Email Field
                     const Text(
                       'Địa chỉ Email',
-                      style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 14),
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
@@ -176,25 +161,36 @@ class _LoginScreenState extends State<LoginScreen> {
                         fillColor: Colors.white.withOpacity(0.06),
                         hintText: 'name@example.com',
                         hintStyle: const TextStyle(color: Colors.white30),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                          borderSide: BorderSide(
+                            color: Colors.white.withOpacity(0.1),
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+                          borderSide: BorderSide(
+                            color: Colors.white.withOpacity(0.12),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFECC741)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFECC741),
+                          ),
                         ),
                       ),
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return 'Email không được để trống';
                         }
-                        final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+                        final emailRegex = RegExp(
+                          r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                        );
                         if (!emailRegex.hasMatch(value.trim())) {
                           return 'Email không hợp lệ';
                         }
@@ -206,7 +202,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     // Password Field
                     const Text(
                       'Mật khẩu',
-                      style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 14),
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
@@ -219,10 +219,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         fillColor: Colors.white.withOpacity(0.06),
                         hintText: '••••••••',
                         hintStyle: const TextStyle(color: Colors.white30),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _showPassword ? Icons.visibility : Icons.visibility_off,
+                            _showPassword
+                                ? Icons.visibility
+                                : Icons.visibility_off,
                             color: Colors.white60,
                           ),
                           onPressed: () {
@@ -233,15 +238,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                          borderSide: BorderSide(
+                            color: Colors.white.withOpacity(0.1),
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+                          borderSide: BorderSide(
+                            color: Colors.white.withOpacity(0.12),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFECC741)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFECC741),
+                          ),
                         ),
                       ),
                       validator: (value) {
@@ -267,7 +278,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         elevation: 4,
-                        disabledBackgroundColor: const Color(0xFFECC741).withOpacity(0.5),
+                        disabledBackgroundColor: const Color(
+                          0xFFECC741,
+                        ).withOpacity(0.5),
                       ),
                       child: _isLoading
                           ? const SizedBox(
@@ -300,7 +313,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           onTap: () {
                             if (_isLoading) return;
                             Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const RegisterScreen(),
+                              ),
                             );
                           },
                           child: const Text(

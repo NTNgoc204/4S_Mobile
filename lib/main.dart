@@ -6,8 +6,12 @@ import 'models/university.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'services/auth_service.dart';
+import 'package:flutter/widgets.dart';
+import 'config/app_config.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AppConfig.init();
   runApp(const MyApp());
 }
 

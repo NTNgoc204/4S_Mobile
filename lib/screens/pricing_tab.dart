@@ -33,11 +33,11 @@ class PricingTab extends StatelessWidget {
           _PricingCard(
             title: 'Free',
             description: 'Phù hợp để khám phá và bắt đầu',
-            price: '0 VND',
+            amount: 0,
+            isFree: true,
             period: '/ trọn đời',
             accentColor: Color(0xFF0ED8AB),
             badge: '',
-            cta: 'Gói hiện tại',
             features: const [
               'Tư vấn hướng nghiệp AI cơ bản',
               'Truy cập 50+ trường đại học',
@@ -50,11 +50,11 @@ class PricingTab extends StatelessWidget {
           _PricingCard(
             title: 'Pro',
             description: 'Dành cho học sinh cần định hướng chuyên sâu',
-            price: '\$27',
+            amount: 270000,
+            isFree: false,
             period: '/ tháng',
             accentColor: Color(0xFFECC741),
             badge: 'Phổ Biến Nhất',
-            cta: 'Thanh toán cập nhật sau',
             features: const [
               'Tư vấn AI không giới hạn',
               'Truy cập 200+ trường đại học',
@@ -67,11 +67,11 @@ class PricingTab extends StatelessWidget {
           _PricingCard(
             title: 'Edu',
             description: 'Dành cho trường học & tổ chức giáo dục',
-            price: 'Liên Hệ',
+            amount: 0,
+            isFree: false,
             period: '',
             accentColor: Color(0xFF7F8CFF),
             badge: 'Dành Cho Trường',
-            cta: 'Liên hệ cập nhật sau',
             features: const [
               'Bao gồm toàn bộ tính năng Pro',
               'Dashboard phân tích hướng nghiệp học sinh',
@@ -97,21 +97,21 @@ class _PricingCard extends StatelessWidget {
   const _PricingCard({
     required this.title,
     required this.description,
-    required this.price,
+    required this.amount,
+    this.isFree = false,
     required this.period,
     required this.accentColor,
     required this.badge,
-    required this.cta,
     required this.features,
   });
 
   final String title;
   final String description;
-  final String price;
+  final int amount;
+  final bool isFree;
   final String period;
   final Color accentColor;
   final String badge;
-  final String cta;
   final List<String> features;
 
   @override
@@ -161,7 +161,7 @@ class _PricingCard extends StatelessWidget {
                 ),
               ),
               Text(
-                price,
+                _displayPrice(),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -198,25 +198,55 @@ class _PricingCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 13),
-            decoration: BoxDecoration(
-              color: accentColor.withOpacity(0.14),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: accentColor.withOpacity(0.35)),
-            ),
-            child: Text(
-              cta,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: accentColor,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
+          GestureDetector(
+            onTap: () {
+              // action placeholder - parent can wrap or replace this widget
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              decoration: BoxDecoration(
+                color: accentColor.withOpacity(0.14),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: accentColor.withOpacity(0.35)),
+              ),
+              child: Text(
+                _ctaLabel(),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _displayPrice() {
+    if (isFree) return 'Miễn phí';
+    if (!isFree && amount == 0) return 'Liên hệ';
+    return _formatVnd(amount);
+  }
+
+  String _ctaLabel() {
+    if (isFree) return 'Hoàn tất đăng ký';
+    if (!isFree && amount == 0) return 'Liên hệ ngay';
+    return 'Thanh toán';
+  }
+
+  String _formatVnd(int value) {
+    final s = value.toString();
+    final buffer = StringBuffer();
+    int count = 0;
+    for (int i = s.length - 1; i >= 0; i--) {
+      buffer.write(s[i]);
+      count++;
+      if (count % 3 == 0 && i != 0) buffer.write(',');
+    }
+    final formatted = buffer.toString().split('').reversed.join();
+    return '$formatted ₫';
   }
 }

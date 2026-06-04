@@ -8,19 +8,15 @@ class UserProfile {
   String role;
   String avatarUrl;
 
-  // Academic Profile
   double gpa;
   double mathScore;
   double englishScore;
   double scienceScore;
 
-  // Preferences
   String preferredLocation;
-  double maxTuition; // in million VND/year
-  String studyMode; // 'Vietnamese' or 'English'
-  String language; // 'vi' or 'en'
-
-  // Plan: 'free', 'pro', 'edu'
+  double maxTuition;
+  String studyMode;
+  String language;
   String currentPlan;
 
   UserProfile({

@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../main.dart';
 import '../models/user.dart';
+import '../services/auth_service.dart';
+import '../utils/auth_validators.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -14,6 +16,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _changePasswordFormKey = GlobalKey<FormState>();
 
   late TextEditingController _fullNameController;
   late TextEditingController _dobController;
@@ -24,6 +27,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _englishController;
   late TextEditingController _scienceController;
 
+  final _oldPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
   late String _location;
   late double _maxTuition;
   late String _studyMode;
@@ -31,10 +38,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isSaving = false;
   bool _isLoggingOut = false;
   bool _isUploadingAvatar = false;
+  bool _isChangingPassword = false;
+  bool _showChangePassword = false;
+  bool _showOldPassword = false;
+  bool _showNewPassword = false;
+  bool _showConfirmPassword = false;
   bool _isInitialized = false;
+  String? _changePasswordError;
 
   static const _locations = ['TP. Hồ Chí Minh', 'Hà Nội', 'Đà Nẵng', 'Cần Thơ'];
   static const _studyModes = ['Tiếng Việt', 'Tiếng Anh', 'Song ngữ'];
+
+  final AuthService _authService = AuthService.instance;
 
   @override
   void didChangeDependencies() {
@@ -70,6 +85,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _mathController.dispose();
     _englishController.dispose();
     _scienceController.dispose();
+    _oldPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -85,15 +103,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     } on PlatformException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            error.code == 'photo_access_denied'
-                ? 'Ứng dụng chưa có quyền truy cập ảnh. Hãy cấp quyền trong Settings.'
-                : 'Không mở được thư viện ảnh. Vui lòng thử lại.',
-          ),
-          backgroundColor: Colors.redAccent,
-        ),
+      _showSnackBar(
+        error.code == 'photo_access_denied'
+            ? 'Ứng dụng chưa có quyền truy cập ảnh. Hãy cấp quyền trong Settings.'
+            : 'Không mở được thư viện ảnh. Vui lòng thử lại.',
+        isError: true,
       );
       return;
     }
@@ -102,25 +116,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() => _isUploadingAvatar = true);
     final appState = AppState.of(context, listen: false);
-    final messenger = ScaffoldMessenger.of(context);
 
     try {
       await appState.uploadAvatar(image.path);
       if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Cập nhật ảnh đại diện thành công.'),
-          backgroundColor: Color(0xFF0ED8AB),
-        ),
-      );
+      _showSnackBar('Cập nhật ảnh đại diện thành công.');
     } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(appState.getAuthErrorMessage(error)),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      _showSnackBar(appState.getAuthErrorMessage(error), isError: true);
     } finally {
       if (mounted) setState(() => _isUploadingAvatar = false);
     }
@@ -151,13 +154,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     appState.updateUserProfile(updatedProfile);
     setState(() => _isSaving = false);
+    _showSnackBar('Lưu thông tin hồ sơ thành công!');
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Lưu thông tin hồ sơ thành công!'),
-        backgroundColor: Color(0xFF0ED8AB),
-      ),
-    );
+  Future<void> _changePassword() async {
+    if (!_changePasswordFormKey.currentState!.validate()) return;
+
+    setState(() {
+      _isChangingPassword = true;
+      _changePasswordError = null;
+    });
+
+    try {
+      await _authService.changePassword(
+        oldPassword: _oldPasswordController.text,
+        newPassword: _newPasswordController.text,
+      );
+      if (!mounted) return;
+      _oldPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+      setState(() {
+        _isChangingPassword = false;
+        _showChangePassword = false;
+      });
+      _showSnackBar('Đổi mật khẩu thành công.');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isChangingPassword = false;
+        _changePasswordError = _authService.getErrorMessage(error);
+      });
+    }
   }
 
   Future<void> _logout() async {
@@ -171,6 +199,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (!mounted) return;
     navigator.pop();
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.redAccent : const Color(0xFF0ED8AB),
+      ),
+    );
   }
 
   @override
@@ -230,6 +267,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildSectionHeader('Tùy chọn học tập', Icons.settings_suggest_outlined),
                 const SizedBox(height: 12),
                 _buildGlassCard(child: _buildPreferenceFields()),
+                const SizedBox(height: 28),
+                _buildChangePasswordSection(),
                 const SizedBox(height: 32),
                 _buildSaveButton(),
                 const SizedBox(height: 16),
@@ -477,6 +516,162 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildChangePasswordSection() {
+    return _buildGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: _isChangingPassword
+                ? null
+                : () {
+                    setState(() {
+                      _showChangePassword = !_showChangePassword;
+                      _changePasswordError = null;
+                    });
+                  },
+            child: Row(
+              children: [
+                const Icon(Icons.lock_outline, color: Color(0xFFECC741), size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Đổi mật khẩu',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _showChangePassword
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  color: Colors.white70,
+                ),
+              ],
+            ),
+          ),
+          if (_showChangePassword) ...[
+            const SizedBox(height: 18),
+            if (_changePasswordError != null) ...[
+              _buildInlineError(_changePasswordError!),
+              const SizedBox(height: 14),
+            ],
+            Form(
+              key: _changePasswordFormKey,
+              child: Column(
+                children: [
+                  _buildTextField(
+                    label: 'Mật khẩu hiện tại',
+                    controller: _oldPasswordController,
+                    obscureText: !_showOldPassword,
+                    suffixIcon: _buildPasswordToggle(
+                      visible: _showOldPassword,
+                      onPressed: () => setState(
+                        () => _showOldPassword = !_showOldPassword,
+                      ),
+                    ),
+                    validator: (value) => AuthValidators.validateRequired(
+                      value,
+                      'Vui lòng nhập mật khẩu hiện tại',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _buildTextField(
+                    label: 'Mật khẩu mới',
+                    controller: _newPasswordController,
+                    obscureText: !_showNewPassword,
+                    suffixIcon: _buildPasswordToggle(
+                      visible: _showNewPassword,
+                      onPressed: () => setState(
+                        () => _showNewPassword = !_showNewPassword,
+                      ),
+                    ),
+                    validator: AuthValidators.validateStrongPassword,
+                  ),
+                  const SizedBox(height: 14),
+                  _buildTextField(
+                    label: 'Xác nhận mật khẩu mới',
+                    controller: _confirmPasswordController,
+                    obscureText: !_showConfirmPassword,
+                    suffixIcon: _buildPasswordToggle(
+                      visible: _showConfirmPassword,
+                      onPressed: () => setState(
+                        () => _showConfirmPassword = !_showConfirmPassword,
+                      ),
+                    ),
+                    validator: (value) => AuthValidators.validateConfirmPassword(
+                      value,
+                      _newPasswordController.text,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isChangingPassword ? null : _changePassword,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFECC741),
+                        foregroundColor: const Color(0xFF0F1E36),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: _isChangingPassword
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF0F1E36),
+                              ),
+                            )
+                          : const Text(
+                              'Cập nhật mật khẩu',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPasswordToggle({
+    required bool visible,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      icon: Icon(
+        visible ? Icons.visibility : Icons.visibility_off,
+        color: Colors.white60,
+      ),
+      onPressed: onPressed,
+    );
+  }
+
+  Widget _buildInlineError(String message) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.redAccent.withOpacity(0.28)),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(color: Color(0xFFFF8A8A), fontSize: 13),
+      ),
+    );
+  }
+
   Future<void> _pickDateOfBirth() async {
     final picked = await showDatePicker(
       context: context,
@@ -577,8 +772,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String label,
     required TextEditingController controller,
     bool readOnly = false,
+    bool obscureText = false,
     VoidCallback? onTap,
     TextInputType? keyboardType,
+    Widget? suffixIcon,
     String? Function(String?)? validator,
   }) {
     return Column(
@@ -596,12 +793,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         TextFormField(
           controller: controller,
           readOnly: readOnly,
+          obscureText: obscureText,
           onTap: onTap,
           keyboardType: keyboardType,
           style: const TextStyle(color: Colors.white, fontSize: 14),
           decoration: InputDecoration(
             filled: true,
             fillColor: Colors.white.withOpacity(0.04),
+            suffixIcon: suffixIcon,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 10,
@@ -733,5 +932,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
 }

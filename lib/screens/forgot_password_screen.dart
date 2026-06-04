@@ -2,53 +2,43 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../utils/auth_validators.dart';
-import '../utils/phone_validator.dart';
 
-class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+class ForgotPasswordScreen extends StatefulWidget {
+  const ForgotPasswordScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
-  final _step1FormKey = GlobalKey<FormState>();
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final _emailFormKey = GlobalKey<FormState>();
   final _otpFormKey = GlobalKey<FormState>();
   final _passwordFormKey = GlobalKey<FormState>();
 
   final _emailController = TextEditingController();
-  final _fullNameController = TextEditingController();
-  final _dobController = TextEditingController();
-  final _addressController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+
+  final AuthService _authService = AuthService.instance;
 
   int _step = 1;
   bool _isLoading = false;
   bool _showPassword = false;
   bool _showConfirmPassword = false;
   String? _errorMessage;
-  String? _verifyToken;
-
-  final AuthService _authService = AuthService.instance;
 
   @override
   void dispose() {
     _emailController.dispose();
-    _fullNameController.dispose();
-    _dobController.dispose();
-    _addressController.dispose();
-    _phoneController.dispose();
     _otpController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleStep1Submit() async {
-    if (!_step1FormKey.currentState!.validate()) return;
+  Future<void> _sendOtp() async {
+    if (!_emailFormKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
@@ -56,13 +46,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      await _authService.registerStep1(
-        email: _email,
-        fullName: _fullNameController.text.trim(),
-        dateOfBirth: _dobController.text.trim(),
-        address: _addressController.text.trim(),
-        phoneNumber: _phoneController.text.trim(),
-      );
+      await _authService.forgotPassword(_email);
       if (!mounted) return;
       setState(() {
         _step = 2;
@@ -74,38 +58,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  Future<void> _handleVerifyOtp() async {
+  Future<void> _verifyOtpLocally() async {
     if (!_otpFormKey.currentState!.validate()) return;
-
     setState(() {
-      _isLoading = true;
+      _step = 3;
       _errorMessage = null;
     });
-
-    try {
-      final verifyToken = await _authService.verifyRegisterOtp(
-        email: _email,
-        otp: _otpController.text.trim(),
-      );
-      if (!mounted) return;
-      setState(() {
-        _verifyToken = verifyToken;
-        _step = 3;
-        _isLoading = false;
-      });
-      _showSnackBar('Xác thực OTP thành công.');
-    } catch (error) {
-      _setError(error);
-    }
   }
 
-  Future<void> _handleRegisterSubmit() async {
+  Future<void> _resetPassword() async {
     if (!_passwordFormKey.currentState!.validate()) return;
-    final verifyToken = _verifyToken;
-    if (verifyToken == null || verifyToken.isEmpty) {
-      setState(() => _errorMessage = 'Vui lòng xác thực OTP trước.');
-      return;
-    }
 
     setState(() {
       _isLoading = true;
@@ -113,12 +75,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      await _authService.registerStep3(
-        verifyToken: verifyToken,
-        password: _passwordController.text,
+      await _authService.resetPassword(
+        email: _email,
+        otp: _otpController.text.trim(),
+        newPassword: _passwordController.text,
       );
       if (!mounted) return;
-      _showSnackBar('Đăng ký thành công. Vui lòng đăng nhập.');
+      _showSnackBar('Đặt lại mật khẩu thành công. Vui lòng đăng nhập.');
       Navigator.of(context).pop();
     } catch (error) {
       _setError(error);
@@ -137,10 +100,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFF0ED8AB),
-      ),
+      SnackBar(content: Text(message), backgroundColor: const Color(0xFF0ED8AB)),
     );
   }
 
@@ -153,14 +113,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() {
       _step -= 1;
       _errorMessage = null;
-      if (_step < 3) {
-        _passwordController.clear();
-        _confirmPasswordController.clear();
-      }
-      if (_step < 2) {
-        _otpController.clear();
-        _verifyToken = null;
-      }
     });
   }
 
@@ -174,9 +126,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: _goBack,
         ),
-        title: Text(
-          _title,
-          style: const TextStyle(
+        title: const Text(
+          'Quên mật khẩu',
+          style: TextStyle(
             color: Colors.white,
             fontSize: 16,
             fontWeight: FontWeight.bold,
@@ -197,14 +149,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildStepHeader(),
+                _buildHeader(),
                 const SizedBox(height: 24),
                 if (_errorMessage != null) ...[
                   _buildErrorBox(_errorMessage!),
                   const SizedBox(height: 20),
                 ],
                 if (_step == 1)
-                  _buildStep1Form()
+                  _buildEmailForm()
                 else if (_step == 2)
                   _buildOtpForm()
                 else
@@ -217,24 +169,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  String get _title {
-    if (_step == 1) return 'Đăng ký tài khoản';
-    if (_step == 2) return 'Xác thực OTP';
-    return 'Tạo mật khẩu';
-  }
-
-  Widget _buildStepHeader() {
-    final subtitle = _step == 1
-        ? 'Nhập thông tin cá nhân để nhận mã OTP.'
+  Widget _buildHeader() {
+    final title = _step == 1
+        ? 'Nhận mã OTP'
         : _step == 2
-        ? 'Nhập mã OTP đã được gửi đến $_email.'
-        : 'Tạo mật khẩu mạnh để hoàn tất đăng ký.';
+            ? 'Xác thực OTP'
+            : 'Đặt mật khẩu mới';
+    final subtitle = _step == 1
+        ? 'Nhập email tài khoản để nhận mã xác minh.'
+        : _step == 2
+            ? 'Nhập mã OTP đã được gửi đến $_email.'
+            : 'Tạo mật khẩu mới cho tài khoản của bạn.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const Icon(Icons.lock_reset, color: Color(0xFFECC741), size: 46),
+        const SizedBox(height: 16),
         Text(
-          _title,
+          title,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 24,
@@ -244,91 +197,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
         const SizedBox(height: 8),
         Text(
           subtitle,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 14,
-            height: 1.4,
-          ),
+          style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
         ),
       ],
     );
   }
 
-  Widget _buildStep1Form() {
+  Widget _buildEmailForm() {
     return Form(
-      key: _step1FormKey,
+      key: _emailFormKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildFieldLabel('Email *'),
+          _buildFieldLabel('Email'),
           const SizedBox(height: 8),
           TextFormField(
             controller: _emailController,
-            style: const TextStyle(color: Colors.white),
-            keyboardType: TextInputType.emailAddress,
             enabled: !_isLoading,
+            keyboardType: TextInputType.emailAddress,
+            style: const TextStyle(color: Colors.white),
             decoration: _inputDecoration('name@example.com'),
             validator: AuthValidators.validateEmail,
           ),
-          const SizedBox(height: 20),
-          _buildFieldLabel('Họ và tên *'),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _fullNameController,
-            style: const TextStyle(color: Colors.white),
-            enabled: !_isLoading,
-            decoration: _inputDecoration('Nhập họ và tên'),
-            validator: (value) => AuthValidators.validateRequired(
-              value,
-              'Họ tên không được để trống',
-            ),
-          ),
-          const SizedBox(height: 20),
-          _buildFieldLabel('Ngày sinh *'),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _dobController,
-            style: const TextStyle(color: Colors.white),
-            enabled: !_isLoading,
-            readOnly: true,
-            decoration: _inputDecoration('YYYY-MM-DD').copyWith(
-              suffixIcon: const Icon(
-                Icons.calendar_today,
-                color: Colors.white60,
-              ),
-            ),
-            onTap: _pickDateOfBirth,
-            validator: (value) => AuthValidators.validateRequired(
-              value,
-              'Vui lòng chọn ngày sinh',
-            ),
-          ),
-          const SizedBox(height: 20),
-          _buildFieldLabel('Địa chỉ *'),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _addressController,
-            style: const TextStyle(color: Colors.white),
-            enabled: !_isLoading,
-            decoration: _inputDecoration('Nhập địa chỉ của bạn'),
-            validator: (value) => AuthValidators.validateRequired(
-              value,
-              'Địa chỉ không được để trống',
-            ),
-          ),
-          const SizedBox(height: 20),
-          _buildFieldLabel('Số điện thoại *'),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _phoneController,
-            style: const TextStyle(color: Colors.white),
-            keyboardType: TextInputType.phone,
-            enabled: !_isLoading,
-            decoration: _inputDecoration('Nhập số điện thoại'),
-            validator: PhoneValidator.validateVietnamPhone,
-          ),
-          const SizedBox(height: 32),
-          _buildPrimaryButton('Gửi mã OTP', _handleStep1Submit),
+          const SizedBox(height: 28),
+          _buildPrimaryButton('Gửi mã OTP', _sendOtp),
         ],
       ),
     );
@@ -340,22 +232,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildFieldLabel('Mã OTP *'),
+          _buildFieldLabel('Mã OTP'),
           const SizedBox(height: 8),
           TextFormField(
             controller: _otpController,
-            style: const TextStyle(color: Colors.white, letterSpacing: 4),
-            keyboardType: TextInputType.number,
             enabled: !_isLoading,
             maxLength: 6,
             textAlign: TextAlign.center,
-            decoration: _inputDecoration(
-              'Nhập mã 6 ký tự',
-            ).copyWith(counterText: ''),
+            keyboardType: TextInputType.number,
+            style: const TextStyle(color: Colors.white, letterSpacing: 4),
+            decoration: _inputDecoration('Nhập mã 6 ký tự').copyWith(counterText: ''),
             validator: AuthValidators.validateOtp,
           ),
-          const SizedBox(height: 24),
-          _buildPrimaryButton('Xác thực OTP', _handleVerifyOtp),
+          const SizedBox(height: 28),
+          _buildPrimaryButton('Tiếp tục', _verifyOtpLocally),
         ],
       ),
     );
@@ -367,13 +257,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildFieldLabel('Mật khẩu *'),
+          _buildFieldLabel('Mật khẩu mới'),
           const SizedBox(height: 8),
           TextFormField(
             controller: _passwordController,
+            enabled: !_isLoading,
             obscureText: !_showPassword,
             style: const TextStyle(color: Colors.white),
-            enabled: !_isLoading,
             decoration: _inputDecoration('••••••••').copyWith(
               suffixIcon: IconButton(
                 icon: Icon(
@@ -386,19 +276,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
             validator: AuthValidators.validateStrongPassword,
           ),
           const SizedBox(height: 20),
-          _buildFieldLabel('Xác nhận mật khẩu *'),
+          _buildFieldLabel('Xác nhận mật khẩu mới'),
           const SizedBox(height: 8),
           TextFormField(
             controller: _confirmPasswordController,
+            enabled: !_isLoading,
             obscureText: !_showConfirmPassword,
             style: const TextStyle(color: Colors.white),
-            enabled: !_isLoading,
             decoration: _inputDecoration('••••••••').copyWith(
               suffixIcon: IconButton(
                 icon: Icon(
-                  _showConfirmPassword
-                      ? Icons.visibility
-                      : Icons.visibility_off,
+                  _showConfirmPassword ? Icons.visibility : Icons.visibility_off,
                   color: Colors.white60,
                 ),
                 onPressed: () => setState(
@@ -411,26 +299,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               _passwordController.text,
             ),
           ),
-          const SizedBox(height: 32),
-          _buildPrimaryButton('Hoàn tất đăng ký', _handleRegisterSubmit),
+          const SizedBox(height: 28),
+          _buildPrimaryButton('Đặt lại mật khẩu', _resetPassword),
         ],
       ),
     );
-  }
-
-  Future<void> _pickDateOfBirth() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(2008),
-      firstDate: DateTime(1990),
-      lastDate: DateTime.now(),
-    );
-
-    if (picked == null) return;
-    setState(() {
-      _dobController.text =
-          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-    });
   }
 
   Widget _buildPrimaryButton(String label, Future<void> Function() onPressed) {

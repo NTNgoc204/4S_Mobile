@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/plan.dart';
 import '../services/auth_service.dart';
+import 'checkout_screen.dart';
 
 class PricingTab extends StatefulWidget {
   const PricingTab({super.key});
@@ -166,6 +167,7 @@ class _PricingTabState extends State<PricingTab> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 14.0),
                         child: _PricingCard(
+                          plan: plan,
                           title: plan.name,
                           description: plan.description,
                           amount: plan.price.toInt(),
@@ -192,6 +194,7 @@ class _PricingTabState extends State<PricingTab> {
 
 class _PricingCard extends StatelessWidget {
   const _PricingCard({
+    required this.plan,
     required this.title,
     required this.description,
     required this.amount,
@@ -203,6 +206,7 @@ class _PricingCard extends StatelessWidget {
     required this.features,
   });
 
+  final PricingPlan plan;
   final String title;
   final String description;
   final int amount;
@@ -318,11 +322,9 @@ class _PricingCard extends StatelessWidget {
                 );
                 return;
               }
-              // Inform user that checkout should be done on the website
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Chức năng thanh toán trên ứng dụng di động đang được phát triển. Vui lòng thực hiện trên website!'),
-                  backgroundColor: Colors.orangeAccent,
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => CheckoutScreen(plan: plan),
                 ),
               );
             },

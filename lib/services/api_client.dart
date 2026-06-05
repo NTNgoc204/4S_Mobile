@@ -123,4 +123,16 @@ class ApiClient {
     await _storage.delete(key: _accessTokenKey);
     await _cookieJar?.deleteAll();
   }
+
+  Future<List<Map<String, dynamic>>> getPlans() async {
+    final response = await dio.get<List<dynamic>>(
+      '/api/Plans',
+      options: Options(
+        extra: const {skipAuthHeaderKey: true},
+      ),
+    );
+    final data = response.data;
+    if (data == null) return [];
+    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
 }

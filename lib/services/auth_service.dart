@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../models/user.dart';
+import '../models/plan.dart';
 import 'api_client.dart';
 
 class AuthService {
@@ -281,5 +282,10 @@ class AuthService {
     }
 
     return 'Không thể kết nối máy chủ. Vui lòng thử lại.';
+  }
+
+  Future<List<PricingPlan>> getPlans() async {
+    final list = await _apiClient.getPlans();
+    return list.map((json) => PricingPlan.fromJson(json)).toList();
   }
 }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../main.dart';
 import '../models/plan.dart';
 import '../services/auth_service.dart';
 
@@ -319,13 +318,11 @@ class _PricingCard extends StatelessWidget {
                 );
                 return;
               }
-              
-              // Proceed with mock checkout/upgrade
-              AppState.of(context, listen: false).upgradeSubscription(planCode);
+              // Inform user that checkout should be done on the website
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Nâng cấp thành công lên gói ${title.toUpperCase()} (Mock)!'),
-                  backgroundColor: accentColor,
+                const SnackBar(
+                  content: Text('Chức năng thanh toán trên ứng dụng di động đang được phát triển. Vui lòng thực hiện trên website!'),
+                  backgroundColor: Colors.orangeAccent,
                 ),
               );
             },

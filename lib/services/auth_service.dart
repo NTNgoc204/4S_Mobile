@@ -219,7 +219,10 @@ class AuthService {
     if (await _apiClient.hasAccessToken) {
       try {
         return await getMe();
-      } catch (_) {
+      } catch (e) {
+        if (e is DioException && _isNetworkError(e)) {
+          rethrow;
+        }
         // Fall through and try the refresh-token cookie below.
       }
     }
@@ -227,10 +230,21 @@ class AuthService {
     try {
       await refreshAccessToken();
       return await getMe();
-    } catch (_) {
+    } catch (e) {
+      if (e is DioException && _isNetworkError(e)) {
+        rethrow;
+      }
       await _apiClient.clearSession();
       return null;
     }
+  }
+
+  bool _isNetworkError(DioException error) {
+    return error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.unknown; // SocketExceptions map to unknown in Dio
   }
 
   Future<void> logout() async {

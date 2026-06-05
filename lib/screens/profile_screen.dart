@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 import '../main.dart';
 import '../models/user.dart';
+import '../models/payment_transaction.dart';
 import '../services/auth_service.dart';
 import '../utils/auth_validators.dart';
 
@@ -46,10 +48,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isInitialized = false;
   String? _changePasswordError;
 
+  List<PaymentTransaction>? _transactions;
+  bool _isLoadingTransactions = false;
+  String? _transactionsError;
+  bool _isTransactionsExpanded = false;
+
   static const _locations = ['TP. Hồ Chí Minh', 'Hà Nội', 'Đà Nẵng', 'Cần Thơ'];
   static const _studyModes = ['Tiếng Việt', 'Tiếng Anh', 'Song ngữ'];
 
   final AuthService _authService = AuthService.instance;
+
+  Future<void> _fetchTransactions() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingTransactions = true;
+      _transactionsError = null;
+    });
+    try {
+      final list = await _authService.getMyTransactionHistory();
+      if (!mounted) return;
+      setState(() {
+        _transactions = list;
+        _isLoadingTransactions = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _transactionsError = _authService.getErrorMessage(error);
+        _isLoadingTransactions = false;
+      });
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -73,6 +102,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? profile.studyMode
         : _studyModes.first;
     _isInitialized = true;
+    _fetchTransactions();
   }
 
   @override
@@ -255,6 +285,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildSectionHeader('Gói đăng ký hiện tại', Icons.card_membership),
                 const SizedBox(height: 12),
                 _buildActivePlanBanner(currentPlan),
+                const SizedBox(height: 28),
+                _buildTransactionHistorySection(),
                 const SizedBox(height: 28),
                 _buildSectionHeader('Thông tin cá nhân', Icons.person_outline),
                 const SizedBox(height: 12),
@@ -930,6 +962,199 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTransactionHistorySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSectionHeader('Lịch sử thanh toán', Icons.receipt_long_outlined),
+        const SizedBox(height: 12),
+        _buildGlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_isLoadingTransactions)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: CircularProgressIndicator(
+                      color: Color(0xFFECC741),
+                    ),
+                  ),
+                )
+              else if (_transactionsError != null)
+                Column(
+                  children: [
+                    Text(
+                      _transactionsError!,
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: _fetchTransactions,
+                      icon: const Icon(Icons.refresh, color: Color(0xFFECC741), size: 16),
+                      label: const Text(
+                        'Thử lại',
+                        style: TextStyle(color: Color(0xFFECC741), fontSize: 13),
+                      ),
+                    ),
+                  ],
+                )
+              else if (_transactions == null || _transactions!.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Text(
+                    'Không có lịch sử giao dịch nào.',
+                    style: TextStyle(color: Colors.white60, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              else ...[
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _isTransactionsExpanded
+                      ? _transactions!.length
+                      : (_transactions!.length > 3 ? 3 : _transactions!.length),
+                  separatorBuilder: (context, index) => Divider(
+                    color: Colors.white.withOpacity(0.08),
+                    height: 24,
+                  ),
+                  itemBuilder: (context, index) {
+                    final tx = _transactions![index];
+                    final isPaid = tx.status.toLowerCase() == 'paid' ||
+                        tx.status.toLowerCase() == 'completed' ||
+                        tx.status.toLowerCase() == 'success';
+                    final isPending = tx.status.toLowerCase() == 'pending';
+                    final amountFormatted = NumberFormat.currency(
+                      locale: 'vi_VN',
+                      symbol: 'đ',
+                      decimalDigits: 0,
+                    ).format(tx.amount);
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                tx.planName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Mã GD: ${tx.transactionCode}',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontSize: 11,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                DateFormat('dd/MM/yyyy HH:mm').format(tx.createdAt),
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.4),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              amountFormatted,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isPaid
+                                    ? const Color(0xFF0ED8AB).withOpacity(0.12)
+                                    : isPending
+                                        ? const Color(0xFFECC741).withOpacity(0.12)
+                                        : Colors.redAccent.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: isPaid
+                                      ? const Color(0xFF0ED8AB).withOpacity(0.3)
+                                      : isPending
+                                          ? const Color(0xFFECC741).withOpacity(0.3)
+                                          : Colors.redAccent.withOpacity(0.3),
+                                ),
+                              ),
+                              child: Text(
+                                isPaid
+                                    ? 'Thành công'
+                                    : isPending
+                                        ? 'Chờ xử lý'
+                                        : 'Thất bại',
+                                style: TextStyle(
+                                  color: isPaid
+                                      ? const Color(0xFF0ED8AB)
+                                      : isPending
+                                          ? const Color(0xFFECC741)
+                                          : Colors.redAccent,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                if (_transactions!.length > 3) ...[
+                  const SizedBox(height: 12),
+                  Center(
+                    child: TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _isTransactionsExpanded = !_isTransactionsExpanded;
+                        });
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFECC741),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                      child: Text(
+                        _isTransactionsExpanded
+                            ? 'Thu gọn'
+                            : 'Xem tất cả (${_transactions!.length})',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

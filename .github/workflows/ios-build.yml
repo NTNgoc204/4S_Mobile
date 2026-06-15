@@ -1,0 +1,64 @@
+name: Flutter iOS Build (Unsigned IPA)
+
+on:
+  push:
+    tags:
+      - 'v*' # Tự động chạy khi bạn gắn tag phiên bản mới, ví dụ: v1.0.0
+  workflow_dispatch: # Cho phép kích hoạt build thủ công bằng nút trên giao diện GitHub
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      # 1. Checkout mã nguồn
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Cài đặt Java JDK
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # 3. Cài đặt Flutter
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 4. Tạo file .env (Vì .env bị gitignore nhưng là asset bắt buộc trong pubspec.yaml)
+      - name: Create .env file
+        run: |
+          echo "API_BASE_URL=https://careerguidancechatboxai.onrender.com" > .env
+
+      # 5. Tải các gói thư viện Flutter
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 6. Cài đặt các iOS Pods (CocoaPods)
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+          cd ..
+
+      # 7. Build ứng dụng iOS Archive ở chế độ không ký mã (Unsigned)
+      - name: Build iOS Archive (Unsigned)
+        run: flutter build ios --release --no-codesign
+
+      # 8. Đóng gói Runner.app thành file .ipa (Thủ thuật tạo unsigned IPA)
+      - name: Create Unsigned IPA
+        run: |
+          mkdir -p Payload
+          mv build/ios/iphoneos/Runner.app Payload/
+          zip -r Runner.ipa Payload
+
+      # 9. Tải file .ipa lên phần Artifacts của GitHub để download
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-app
+          path: Runner.ipa

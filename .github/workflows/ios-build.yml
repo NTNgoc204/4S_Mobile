@@ -38,25 +38,19 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # 6. Cài đặt các iOS Pods (CocoaPods)
-      - name: Install CocoaPods
-        run: |
-          cd ios
-          pod install --repo-update
-          cd ..
-
-      # 7. Build ứng dụng iOS Archive ở chế độ không ký mã (Unsigned)
+      # 6. Build ứng dụng iOS Archive ở chế độ không ký mã (Unsigned)
+      # Bước này sẽ tự động khởi tạo Podfile và chạy `pod install` tự động bên trong
       - name: Build iOS Archive (Unsigned)
         run: flutter build ios --release --no-codesign
 
-      # 8. Đóng gói Runner.app thành file .ipa (Thủ thuật tạo unsigned IPA)
+      # 7. Đóng gói Runner.app thành file .ipa (Thủ thuật tạo unsigned IPA)
       - name: Create Unsigned IPA
         run: |
           mkdir -p Payload
           mv build/ios/iphoneos/Runner.app Payload/
           zip -r Runner.ipa Payload
 
-      # 9. Tải file .ipa lên phần Artifacts của GitHub để download
+      # 8. Tải file .ipa lên phần Artifacts của GitHub để download
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:

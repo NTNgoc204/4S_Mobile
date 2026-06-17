@@ -135,4 +135,42 @@ class ApiClient {
     if (data == null) return [];
     return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
   }
+
+  Future<List<Map<String, dynamic>>> getQuestions() async {
+    final response = await dio.get<List<dynamic>>('/api/Questions');
+    final data = response.data;
+    if (data == null) return [];
+    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getQuestionOptions() async {
+    final response = await dio.get<List<dynamic>>('/api/QuestionOptions');
+    final data = response.data;
+    if (data == null) return [];
+    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getUserAnswers() async {
+    final response = await dio.get<Map<String, dynamic>>('/api/UserAnswers');
+    final data = response.data?['data'] as List<dynamic>?;
+    if (data == null) return [];
+    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<void> createUserAnswer({
+    required String questionId,
+    required String answer,
+  }) async {
+    await dio.post<void>(
+      '/api/UserAnswers',
+      data: {
+        'questionId': questionId,
+        'answer': answer,
+      },
+    );
+  }
+
+  Future<void> deleteUserAnswers() async {
+    await dio.delete<void>('/api/UserAnswers');
+  }
 }

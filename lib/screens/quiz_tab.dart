@@ -20,6 +20,7 @@ class _QuizTabState extends State<QuizTab> {
   bool _isThinking = false;
   String? _loadError;
   String? _thinkingQuestionId;
+  final ScrollController _scrollController = ScrollController();
 
   Map<String, int> _profile = _createEmptyProfile();
 
@@ -37,6 +38,12 @@ class _QuizTabState extends State<QuizTab> {
   void initState() {
     super.initState();
     _loadQuiz();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadQuiz() async {
@@ -106,6 +113,8 @@ class _QuizTabState extends State<QuizTab> {
       _profile = restoredProfile;
       _isLoading = false;
     });
+
+    _scrollToBottom();
 
     if (restoredAnswers.length == loadedQuestions.length && loadedQuestions.isNotEmpty) {
       AppState.of(context, listen: false).completeQuiz(restoredProfile);
@@ -181,6 +190,40 @@ class _QuizTabState extends State<QuizTab> {
     return option == null ? '' : buildInsightText(option, 'vi');
   }
 
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+  }
+
+  List<Widget> _buildVisibleQuestions() {
+    int firstUnansweredIndex = 0;
+    for (int i = 0; i < _questions.length; i++) {
+      if (!_answers.containsKey(_questions[i].id)) {
+        firstUnansweredIndex = i;
+        break;
+      }
+      if (i == _questions.length - 1) {
+        firstUnansweredIndex = _questions.length;
+      }
+    }
+
+    final limit = (firstUnansweredIndex + 1).clamp(0, _questions.length);
+    final visibleList = _questions.take(limit).toList();
+
+    return visibleList.asMap().entries.map((entry) {
+      return _buildQuestionCard(entry.key, entry.value);
+    }).toList();
+  }
+
   Future<void> _onSelectOption(QuizQuestion question, QuizOption option) async {
     if (_isThinking || _answers.containsKey(question.id)) return;
 
@@ -197,6 +240,8 @@ class _QuizTabState extends State<QuizTab> {
       _isThinking = true;
       _thinkingQuestionId = question.id;
     });
+
+    _scrollToBottom();
 
     try {
       await ApiClient.instance.createUserAnswer(
@@ -216,6 +261,7 @@ class _QuizTabState extends State<QuizTab> {
         _isThinking = false;
         _thinkingQuestionId = null;
       });
+      _scrollToBottom();
       return;
     }
 
@@ -226,6 +272,8 @@ class _QuizTabState extends State<QuizTab> {
       _isThinking = false;
       _thinkingQuestionId = null;
     });
+
+    _scrollToBottom();
 
     if (_answers.length == _questions.length) {
       AppState.of(context, listen: false).completeQuiz(_profile);
@@ -290,6 +338,7 @@ class _QuizTabState extends State<QuizTab> {
     final progress = _questions.isEmpty ? 0.0 : _answers.length / _questions.length;
 
     return SingleChildScrollView(
+      controller: _scrollController,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -318,9 +367,7 @@ class _QuizTabState extends State<QuizTab> {
             ),
           ),
           const SizedBox(height: 24),
-          ..._questions.asMap().entries.map(
-                (entry) => _buildQuestionCard(entry.key, entry.value),
-              ),
+          ..._buildVisibleQuestions(),
         ],
       ),
     );

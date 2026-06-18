@@ -21,6 +21,8 @@ class _QuizTabState extends State<QuizTab> {
   String? _loadError;
   String? _thinkingQuestionId;
   final ScrollController _scrollController = ScrollController();
+  int _activeIndex = 0;
+  bool _showResults = false;
 
   Map<String, int> _profile = _createEmptyProfile();
 
@@ -63,7 +65,15 @@ class _QuizTabState extends State<QuizTab> {
       ]);
 
       final questionRows = results[0]
-          .where((question) => question['isActice']?.toString() != 'No')
+          .where((question) {
+            if (question['isActice']?.toString() == 'No') return false;
+            final catId = question['categoryId']?.toString() ?? question['CategoryId']?.toString();
+            final catName = question['categoryName']?.toString() ?? question['CategoryName']?.toString();
+            if (catId == 'b1a2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d' || catName == 'Trò chuyện hướng nghiệp AI') {
+              return false;
+            }
+            return true;
+          })
           .toList()
         ..sort(
           (a, b) => ((a['displayOrder'] as num?)?.toInt() ?? 0).compareTo(
@@ -101,6 +111,13 @@ class _QuizTabState extends State<QuizTab> {
         questionId: _buildInsightForAnswer(loadedQuestions, restoredAnswers, questionId),
     };
 
+    final isQuizCompletedOnLoad = restoredAnswers.length == loadedQuestions.length && loadedQuestions.isNotEmpty;
+
+    int firstUnansweredIndex = loadedQuestions.indexWhere((q) => !restoredAnswers.containsKey(q.id));
+    if (firstUnansweredIndex == -1) {
+      firstUnansweredIndex = loadedQuestions.isNotEmpty ? loadedQuestions.length - 1 : 0;
+    }
+
     if (!mounted) return;
     setState(() {
       _questions = loadedQuestions;
@@ -111,12 +128,14 @@ class _QuizTabState extends State<QuizTab> {
         ..clear()
         ..addAll(restoredInsights);
       _profile = restoredProfile;
+      _activeIndex = firstUnansweredIndex;
+      _showResults = isQuizCompletedOnLoad;
       _isLoading = false;
     });
 
     _scrollToBottom();
 
-    if (restoredAnswers.length == loadedQuestions.length && loadedQuestions.isNotEmpty) {
+    if (isQuizCompletedOnLoad) {
       AppState.of(context, listen: false).completeQuiz(restoredProfile);
     }
   }
@@ -205,18 +224,7 @@ class _QuizTabState extends State<QuizTab> {
   }
 
   List<Widget> _buildVisibleQuestions() {
-    int firstUnansweredIndex = 0;
-    for (int i = 0; i < _questions.length; i++) {
-      if (!_answers.containsKey(_questions[i].id)) {
-        firstUnansweredIndex = i;
-        break;
-      }
-      if (i == _questions.length - 1) {
-        firstUnansweredIndex = _questions.length;
-      }
-    }
-
-    final limit = (firstUnansweredIndex + 1).clamp(0, _questions.length);
+    final limit = (_activeIndex + 1).clamp(0, _questions.length);
     final visibleList = _questions.take(limit).toList();
 
     return visibleList.asMap().entries.map((entry) {
@@ -227,16 +235,11 @@ class _QuizTabState extends State<QuizTab> {
   Future<void> _onSelectOption(QuizQuestion question, QuizOption option) async {
     if (_isThinking || _answers.containsKey(question.id)) return;
 
-    final previousAnswers = Map<String, String>.from(_answers);
-    final previousInsights = Map<String, String>.from(_insights);
-    final previousProfile = Map<String, int>.from(_profile);
-
     setState(() {
       _answers[question.id] = option.id;
       option.vector.forEach((key, value) {
         _profile[key] = (_profile[key] ?? 0) + value;
       });
-      _insights[question.id] = buildInsightText(option, 'vi');
       _isThinking = true;
       _thinkingQuestionId = question.id;
     });
@@ -251,13 +254,10 @@ class _QuizTabState extends State<QuizTab> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _answers
-          ..clear()
-          ..addAll(previousAnswers);
-        _insights
-          ..clear()
-          ..addAll(previousInsights);
-        _profile = previousProfile;
+        _answers.remove(question.id);
+        option.vector.forEach((key, value) {
+          _profile[key] = (_profile[key] ?? 0) - value;
+        });
         _isThinking = false;
         _thinkingQuestionId = null;
       });
@@ -265,18 +265,31 @@ class _QuizTabState extends State<QuizTab> {
       return;
     }
 
-    await Future.delayed(const Duration(milliseconds: 700));
-
+    // 1. Sau 320ms, hiển thị insight box (tắt thinking)
+    await Future.delayed(const Duration(milliseconds: 320));
     if (!mounted) return;
     setState(() {
+      _insights[question.id] = buildInsightText(option, 'vi');
       _isThinking = false;
       _thinkingQuestionId = null;
     });
-
     _scrollToBottom();
 
-    if (_answers.length == _questions.length) {
+    // 2. Sau thêm 580ms (tổng cộng 900ms), tiến tới câu tiếp theo hoặc hoàn thành quiz
+    await Future.delayed(const Duration(milliseconds: 580));
+    if (!mounted) return;
+
+    final isLastQuestion = _answers.length == _questions.length;
+    if (isLastQuestion) {
+      setState(() {
+        _showResults = true;
+      });
       AppState.of(context, listen: false).completeQuiz(_profile);
+    } else {
+      setState(() {
+        _activeIndex = _activeIndex + 1;
+      });
+      _scrollToBottom();
     }
   }
 
@@ -292,6 +305,8 @@ class _QuizTabState extends State<QuizTab> {
       _isThinking = false;
       _thinkingQuestionId = null;
       _profile = _createEmptyProfile();
+      _activeIndex = 0;
+      _showResults = false;
     });
     AppState.of(context, listen: false).resetQuiz();
   }
@@ -330,7 +345,7 @@ class _QuizTabState extends State<QuizTab> {
       );
     }
 
-    final isDone = _answers.length == _questions.length;
+    final isDone = _showResults;
     if (isDone) {
       return _buildResultsScreen();
     }

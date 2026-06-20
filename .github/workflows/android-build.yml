@@ -37,7 +37,7 @@ jobs:
       # 4. Create .env file (since it is ignored by git but required in pubspec.yaml)
       - name: Create .env file
         env:
-          API_URL: ${{ secrets.API_BASE_URL || 'https://careerguidancechatboxai.onrender.com' }}
+          API_URL: ${{ secrets.API_BASE_URL }}
         run: |
           echo "::add-mask::$API_URL"
           echo "API_BASE_URL=$API_URL" > .env

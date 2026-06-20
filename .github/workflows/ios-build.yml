@@ -32,7 +32,7 @@ jobs:
       # 4. Tạo file .env (Vì .env bị gitignore nhưng là asset bắt buộc trong pubspec.yaml)
       - name: Create .env file
         env:
-          API_URL: ${{ secrets.API_BASE_URL || 'https://careerguidancechatboxai.onrender.com' }}
+          API_URL: ${{ secrets.API_BASE_URL }}
         run: |
           echo "::add-mask::$API_URL"
           echo "API_BASE_URL=$API_URL" > .env

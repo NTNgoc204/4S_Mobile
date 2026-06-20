@@ -31,8 +31,11 @@ jobs:
 
       # 4. Tạo file .env (Vì .env bị gitignore nhưng là asset bắt buộc trong pubspec.yaml)
       - name: Create .env file
+        env:
+          API_URL: ${{ secrets.API_BASE_URL || 'https://careerguidancechatboxai.onrender.com' }}
         run: |
-          echo "API_BASE_URL=https://careerguidancechatboxai.onrender.com" > .env
+          echo "::add-mask::$API_URL"
+          echo "API_BASE_URL=$API_URL" > .env
 
       # 5. Tải các gói thư viện Flutter
       - name: Install dependencies
@@ -48,11 +51,11 @@ jobs:
         run: |
           mkdir -p Payload
           mv build/ios/iphoneos/Runner.app Payload/
-          zip -r Runner.ipa Payload
+          zip -r CareerGuidanceAI.ipa Payload
 
       # 8. Tải file .ipa lên phần Artifacts của GitHub để download
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-unsigned-app
-          path: Runner.ipa
+          path: CareerGuidanceAI.ipa

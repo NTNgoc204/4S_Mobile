@@ -34,10 +34,13 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 4. Create .env asset file (since it is ignored by git but required in pubspec.yaml)
+      # 4. Create .env file (since it is ignored by git but required in pubspec.yaml)
       - name: Create .env file
+        env:
+          API_URL: ${{ secrets.API_BASE_URL || 'https://careerguidancechatboxai.onrender.com' }}
         run: |
-          echo "API_BASE_URL=https://careerguidancechatboxai.onrender.com" > .env
+          echo "::add-mask::$API_URL"
+          echo "API_BASE_URL=$API_URL" > .env
 
       # 5. Install Flutter package dependencies
       - name: Install dependencies

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models/chat.dart';
-import '../models/university.dart';
+import '../models/quiz.dart';
 
 class ChatTab extends StatefulWidget {
   const ChatTab({super.key});
@@ -16,13 +16,13 @@ class _ChatTabState extends State<ChatTab> {
   final ScrollController _scrollController = ScrollController();
   final List<StreamSubscription> _subscriptions = [];
 
-  final List<String> _quickPrompts = [
-    'Trường có học phí dưới 50 triệu',
-    'Ngành IT nổi bật',
-    'Trường ở TP.HCM',
-    'Ngành kinh doanh dễ có việc',
-    'Học bổng ngành kỹ thuật',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppState.of(context, listen: false).initChatSession();
+    });
+  }
 
   @override
   void dispose() {
@@ -56,14 +56,13 @@ class _ChatTabState extends State<ChatTab> {
     _scrollToBottom();
   }
 
-  void _sendPresetMessage(int index) {
-    final text = _quickPrompts[index];
+  void _sendPresetMessage(String text, int index) {
     final appState = AppState.of(context, listen: false);
     appState.addChatMessage(text, isPreset: true, presetIndex: index);
     _scrollToBottom();
   }
 
-  void _showUniversityDetail(UniversityWithScore school) {
+  void _showUniversityDetail(AiUniversityRecommendation school) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0F1E36),
@@ -80,13 +79,31 @@ class _ChatTabState extends State<ChatTab> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (school.avatar != null && school.avatar!.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        school.avatar!,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 48,
+                          height: 48,
+                          color: Colors.white10,
+                          child: const Icon(Icons.school, color: Color(0xFF0ED8AB)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           school.name['vi']!,
-                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -96,6 +113,7 @@ class _ChatTabState extends State<ChatTab> {
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
@@ -103,20 +121,18 @@ class _ChatTabState extends State<ChatTab> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'Match: ${school.score}%',
+                      'Match: ${school.matchPercent}%',
                       style: const TextStyle(color: Color(0xFFECC741), fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                   ),
                 ],
               ),
               const Divider(color: Colors.white12, height: 24),
-              _buildDetailRow(Icons.school, 'Khối ngành đào tạo:', school.major['vi']!),
-              const SizedBox(height: 12),
-              _buildDetailRow(Icons.monetization_on, 'Học phí tham khảo:', school.tuition['vi']!),
-              const SizedBox(height: 12),
-              _buildDetailRow(Icons.people, 'Quy mô sinh viên:', school.stats['students']!['vi']!),
-              const SizedBox(height: 12),
-              _buildDetailRow(Icons.star, 'Thứ hạng nổi bật:', school.stats['rank']!['vi']!),
+              _buildDetailRow(Icons.school, 'Khối ngành đào tạo phù hợp:', school.major['vi']!),
+              if (school.ranking > 0) ...[
+                const SizedBox(height: 12),
+                _buildDetailRow(Icons.star, 'Xếp hạng chất lượng:', '${school.ranking} / 5.0'),
+              ],
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -201,6 +217,7 @@ class _ChatTabState extends State<ChatTab> {
 
               final ChatMessage msg = messages[index];
               final bool isUser = msg.role == 'user';
+              final bool isEval = msg.id.startsWith('eval-');
 
               return Align(
                 alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -209,7 +226,11 @@ class _ChatTabState extends State<ChatTab> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
                   decoration: BoxDecoration(
-                    color: isUser ? const Color(0xFFECC741) : Colors.white.withOpacity(0.06),
+                    color: isUser
+                        ? const Color(0xFFECC741)
+                        : isEval
+                            ? const Color(0xFF0ED8AB).withOpacity(0.08)
+                            : Colors.white.withOpacity(0.06),
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(16),
                       topRight: const Radius.circular(16),
@@ -218,16 +239,37 @@ class _ChatTabState extends State<ChatTab> {
                     ),
                     border: isUser
                         ? null
-                        : Border.all(color: Colors.white.withOpacity(0.06)),
+                        : Border.all(
+                            color: isEval
+                                ? const Color(0xFF0ED8AB).withOpacity(0.3)
+                                : Colors.white.withOpacity(0.06),
+                          ),
                   ),
-                  child: Text(
-                    msg.content,
-                    style: TextStyle(
-                      color: isUser ? const Color(0xFF0F1E36) : Colors.white,
-                      fontSize: 14,
-                      height: 1.4,
-                      fontWeight: isUser ? FontWeight.w600 : FontWeight.normal,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isEval) ...[
+                        const Icon(Icons.psychology, color: Color(0xFF0ED8AB), size: 16),
+                        const SizedBox(width: 8),
+                      ],
+                      Flexible(
+                        child: Text(
+                          msg.content,
+                          style: TextStyle(
+                            color: isUser
+                                ? const Color(0xFF0F1E36)
+                                : isEval
+                                    ? const Color(0xFF0ED8AB)
+                                    : Colors.white,
+                            fontSize: 14,
+                            height: 1.4,
+                            fontStyle: isEval ? FontStyle.italic : FontStyle.normal,
+                            fontWeight: isUser ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               );
@@ -292,7 +334,7 @@ class _ChatTabState extends State<ChatTab> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            '${school.score}%',
+                            '${school.matchPercent}%',
                             style: const TextStyle(color: Color(0xFFECC741), fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -318,39 +360,43 @@ class _ChatTabState extends State<ChatTab> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Quick tag presets list
-                SizedBox(
-                  height: 34,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _quickPrompts.length,
-                    itemBuilder: (context, index) {
-                      final bool isUsed = appState.usedPromptIndexes.contains(index);
+                if (appState.activeQuickPrompts.isNotEmpty)
+                  SizedBox(
+                    height: 34,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: appState.activeQuickPrompts.length,
+                      itemBuilder: (context, index) {
+                        final bool isUsed = appState.usedPromptIndexes.contains(index);
+                        final String promptText = appState.activeQuickPrompts[index];
 
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: ActionChip(
-                          onPressed: isThinking || isUsed ? null : () => _sendPresetMessage(index),
-                          backgroundColor: isUsed
-                              ? Colors.white10
-                              : const Color(0xFF0ED8AB).withOpacity(0.08),
-                          side: BorderSide(
-                            color: isUsed
-                                ? Colors.transparent
-                                : const Color(0xFF0ED8AB).withOpacity(0.2),
-                          ),
-                          label: Text(
-                            _quickPrompts[index],
-                            style: TextStyle(
-                              color: isUsed ? Colors.white30 : const Color(0xFF0ED8AB),
-                              fontSize: 12,
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: ActionChip(
+                            onPressed: isThinking || isUsed
+                                ? null
+                                : () => _sendPresetMessage(promptText, index),
+                            backgroundColor: isUsed
+                                ? Colors.white10
+                                : const Color(0xFF0ED8AB).withOpacity(0.08),
+                            side: BorderSide(
+                              color: isUsed
+                                  ? Colors.transparent
+                                  : const Color(0xFF0ED8AB).withOpacity(0.2),
                             ),
+                            label: Text(
+                              promptText,
+                              style: TextStyle(
+                                color: isUsed ? Colors.white30 : const Color(0xFF0ED8AB),
+                                fontSize: 12,
+                              ),
+                            ),
+                            padding: EdgeInsets.zero,
                           ),
-                          padding: EdgeInsets.zero,
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
-                ),
                 const SizedBox(height: 8),
 
                 // Keyboard input field

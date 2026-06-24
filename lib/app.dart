@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'models/user.dart';
 import 'models/chat.dart';
-import 'models/university.dart';
+import 'models/quiz.dart';
+import 'services/api_client.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'services/auth_service.dart';
@@ -34,6 +35,7 @@ class AppState extends State<AppStateWrapper> {
   bool isLoggingOut = false;
 
   // AI Chat states
+  String? chatSessionId;
   final List<ChatMessage> chatMessages = [];
   final Map<String, int> chatProfile = {
     'tech': 0,
@@ -45,7 +47,15 @@ class AppState extends State<AppStateWrapper> {
   int signalCount = 0;
   final List<int> usedPromptIndexes = [];
   bool isChatThinking = false;
-  List<UniversityWithScore> chatRecommendations = [];
+  List<AiUniversityRecommendation> chatRecommendations = [];
+  List<Map<String, dynamic>> allQuestions = [];
+  List<Map<String, dynamic>> allQuestionOptions = [];
+  List<String> activeQuickPrompts = [];
+
+  // AI Chat History states
+  List<Map<String, dynamic>> chatSessions = [];
+  bool isSessionsLoading = false;
+  bool isActiveSessionLoading = false;
 
   // Career Quiz states
   bool isQuizCompleted = false;
@@ -144,10 +154,15 @@ class AppState extends State<AppStateWrapper> {
         kind: 'welcome',
       ),
     );
+    chatSessionId = null;
     chatProfile.forEach((k, v) => chatProfile[k] = 0);
     signalCount = 0;
     usedPromptIndexes.clear();
-    chatRecommendations = rankUniversities(chatProfile);
+    chatRecommendations.clear();
+    activeQuickPrompts = [];
+    chatSessions = [];
+    isSessionsLoading = false;
+    isActiveSessionLoading = false;
   }
 
   // Authentication Actions
@@ -254,11 +269,321 @@ class AppState extends State<AppStateWrapper> {
   }
 
   // AI Chat Actions
-  void addChatMessage(String text, {required bool isPreset, int? presetIndex}) {
+  List<String> _getQuickPromptsForQuestion(String? questionContent) {
+    if (questionContent == null || questionContent.trim().isEmpty) {
+      return [];
+    }
+
+    try {
+      final question = allQuestions.firstWhere(
+        (q) => q['content']?.toString().trim().toLowerCase() == questionContent.trim().toLowerCase(),
+        orElse: () => {},
+      );
+
+      if (question.isEmpty) {
+        return [];
+      }
+
+      final questionId = question['id']?.toString();
+      final options = allQuestionOptions
+          .where((opt) => opt['questionId']?.toString() == questionId)
+          .toList();
+
+      if (options.isEmpty) {
+        return [];
+      }
+
+      options.sort((a, b) {
+        final aOrder = int.tryParse(a['displayOrder']?.toString() ?? '') ?? 0;
+        final bOrder = int.tryParse(b['displayOrder']?.toString() ?? '') ?? 0;
+        return aOrder.compareTo(bOrder);
+      });
+
+      return options
+          .map((opt) => opt['content']?.toString() ?? '')
+          .where((text) => text.trim().isNotEmpty)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> loadChatSessions() async {
+    setState(() {
+      isSessionsLoading = true;
+    });
+
+    try {
+      final sessions = await ApiClient.instance.getChatSessions();
+      setState(() {
+        chatSessions = sessions;
+        isSessionsLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        isSessionsLoading = false;
+      });
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('Không thể tải lịch sử trò chuyện: $e'),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    }
+  }
+
+  Future<void> loadChatSessionDetail(String sessionId) async {
+    setState(() {
+      isActiveSessionLoading = true;
+      isChatThinking = true;
+    });
+
+    try {
+      if (allQuestions.isEmpty) {
+        final questions = await ApiClient.instance.getQuestions();
+        final options = await ApiClient.instance.getQuestionOptions();
+        allQuestions = questions;
+        allQuestionOptions = options;
+      }
+
+      final detail = await ApiClient.instance.getChatSessionDetail(sessionId);
+      
+      final chatHistory = detail['chatHistory'] as List<dynamic>? ?? [];
+      final summary = detail['summary'];
+      final nextQuestionContent = detail['nextQuestionContent']?.toString();
+
+      final List<ChatMessage> restoredMessages = [];
+      
+      restoredMessages.add(
+        ChatMessage(
+          id: 'welcome',
+          role: 'assistant',
+          content: 'Xin chào! Tôi là Trợ lý Hướng nghiệp AI 4S. Tôi có thể giúp bạn tìm ngành học, trường phù hợp, hoặc giải đáp thắc mắc về định hướng tương lai. Bạn muốn bắt đầu từ điều gì?',
+          kind: 'welcome',
+        ),
+      );
+
+      if (chatHistory.isEmpty) {
+        if (nextQuestionContent != null && nextQuestionContent.trim().isNotEmpty) {
+          restoredMessages.add(
+            ChatMessage(
+              id: 'question-init',
+              role: 'assistant',
+              content: nextQuestionContent,
+            ),
+          );
+        }
+      } else {
+        final firstQuestionText = chatHistory[0]['questionContent']?.toString();
+        if (firstQuestionText != null && firstQuestionText.trim().isNotEmpty) {
+          restoredMessages.add(
+            ChatMessage(
+              id: 'question-0',
+              role: 'assistant',
+              content: firstQuestionText,
+            ),
+          );
+        }
+
+        for (int i = 0; i < chatHistory.length; i++) {
+          final item = chatHistory[i];
+          final qId = item['questionId']?.toString() ?? i.toString();
+
+          restoredMessages.add(
+            ChatMessage(
+              id: 'user-$qId',
+              role: 'user',
+              content: item['userAnswer']?.toString() ?? '',
+            ),
+          );
+
+          final evaluation = item['evaluation']?.toString();
+          if (evaluation != null && evaluation.trim().isNotEmpty) {
+            restoredMessages.add(
+              ChatMessage(
+                id: 'eval-$qId',
+                role: 'assistant',
+                content: 'AI nhận xét: "$evaluation"',
+                kind: 'assistant_demo',
+              ),
+            );
+          }
+
+          String? nextQText;
+          if (i < chatHistory.length - 1) {
+            nextQText = chatHistory[i + 1]['questionContent']?.toString();
+          } else {
+            nextQText = nextQuestionContent;
+          }
+
+          if (nextQText != null && nextQText.trim().isNotEmpty) {
+            restoredMessages.add(
+              ChatMessage(
+                id: 'question-next-$qId',
+                role: 'assistant',
+                content: nextQText,
+              ),
+            );
+          }
+        }
+      }
+
+      List<AiUniversityRecommendation> restoredRecs = [];
+      if (summary != null && summary['recommendations'] is List) {
+        final recsList = summary['recommendations'] as List;
+        restoredRecs = recsList.map((item) {
+          return AiUniversityRecommendation.fromJson(
+            Map<String, dynamic>.from(item as Map),
+            'top3',
+          );
+        }).toList();
+      }
+
+      setState(() {
+        chatSessionId = sessionId;
+        chatMessages.clear();
+        chatMessages.addAll(restoredMessages);
+        chatRecommendations = restoredRecs;
+        signalCount = restoredRecs.length;
+        activeQuickPrompts = _getQuickPromptsForQuestion(nextQuestionContent);
+        usedPromptIndexes.clear();
+        isActiveSessionLoading = false;
+        isChatThinking = false;
+      });
+    } catch (e) {
+      setState(() {
+        isActiveSessionLoading = false;
+        isChatThinking = false;
+      });
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('Không thể tải chi tiết phiên trò chuyện: $e'),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    }
+  }
+
+  Future<void> deleteChatSession(String sessionId) async {
+    setState(() {
+      isSessionsLoading = true;
+    });
+
+    try {
+      final success = await ApiClient.instance.deleteChatSession(sessionId);
+      if (success) {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(
+            content: Text('Đã xóa phiên trò chuyện thành công.'),
+            backgroundColor: Color(0xFF0ED8AB),
+          ),
+        );
+      }
+      
+      final sessions = await ApiClient.instance.getChatSessions();
+      
+      setState(() {
+        chatSessions = sessions;
+        isSessionsLoading = false;
+        
+        if (chatSessionId == sessionId) {
+          _resetChatState();
+          initChatSession();
+        }
+      });
+    } catch (e) {
+      setState(() {
+        isSessionsLoading = false;
+      });
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('Xóa phiên trò chuyện thất bại: $e'),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    }
+  }
+
+  Future<void> initChatSession() async {
+    if (chatSessionId != null && chatMessages.length > 1) return;
+
+    setState(() {
+      isChatThinking = true;
+    });
+
+    try {
+      // Tải danh sách câu hỏi và options động nếu chưa tải
+      if (allQuestions.isEmpty) {
+        final questions = await ApiClient.instance.getQuestions();
+        final options = await ApiClient.instance.getQuestionOptions();
+        allQuestions = questions;
+        allQuestionOptions = options;
+      }
+
+      final response = await ApiClient.instance.continueGuidedChat(
+        sessionId: null,
+        message: null,
+      );
+
+      final newSessionId = response['sessionId']?.toString();
+      final nextQuestion = response['nextQuestionContent']?.toString();
+
+      setState(() {
+        chatSessionId = newSessionId;
+        chatMessages.clear();
+        chatMessages.add(
+          ChatMessage(
+            id: 'welcome',
+            role: 'assistant',
+            content:
+                'Xin chào! Tôi là Trợ lý Hướng nghiệp AI 4S. Tôi có thể giúp bạn tìm ngành học, trường phù hợp, hoặc giải đáp thắc mắc về định hướng tương lai. Bạn muốn bắt đầu từ điều gì?',
+            kind: 'welcome',
+          ),
+        );
+        if (nextQuestion != null && nextQuestion.trim().isNotEmpty) {
+          chatMessages.add(
+            ChatMessage(
+              id: 'question-${DateTime.now().millisecondsSinceEpoch}',
+              role: 'assistant',
+              content: nextQuestion,
+            ),
+          );
+        }
+
+        activeQuickPrompts = _getQuickPromptsForQuestion(nextQuestion);
+        chatRecommendations.clear();
+        signalCount = 0;
+        isChatThinking = false;
+      });
+    } catch (e) {
+      setState(() {
+        isChatThinking = false;
+      });
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('Không thể khởi tạo phiên chat AI: $e'),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    }
+  }
+
+  Future<void> resetChatSession() async {
+    setState(() {
+      chatSessionId = null;
+      chatMessages.clear();
+      chatRecommendations.clear();
+      signalCount = 0;
+      usedPromptIndexes.clear();
+      activeQuickPrompts = [];
+    });
+    await initChatSession();
+  }
+
+  Future<void> addChatMessage(String text, {required bool isPreset, int? presetIndex}) async {
     if (isChatThinking) return;
 
     setState(() {
-      // 1. Add User Message
       chatMessages.add(
         ChatMessage(
           id: 'user-${DateTime.now().millisecondsSinceEpoch}',
@@ -266,86 +591,108 @@ class AppState extends State<AppStateWrapper> {
           content: text,
         ),
       );
-
+      if (isPreset && presetIndex != null) {
+        usedPromptIndexes.add(presetIndex);
+      }
       isChatThinking = true;
     });
 
-    // 2. Perform background analysis and reply generation after 700ms
-    Timer(const Duration(milliseconds: 700), () {
-      if (!mounted) return;
+    try {
+      // Đảm bảo dữ liệu câu hỏi được tải trước khi gửi tin nhắn tiếp theo
+      if (allQuestions.isEmpty) {
+        final questions = await ApiClient.instance.getQuestions();
+        final options = await ApiClient.instance.getQuestionOptions();
+        allQuestions = questions;
+        allQuestionOptions = options;
+      }
+
+      final response = await ApiClient.instance.continueGuidedChat(
+        sessionId: chatSessionId,
+        message: text,
+      );
+
+      final nextSessionId = response['sessionId']?.toString();
+      final evaluation = response['evaluation']?.toString();
+      final aiMessage = response['message']?.toString();
+      final nextQuestion = response['nextQuestionContent']?.toString();
+      final summary = response['summary'];
 
       setState(() {
+        if (nextSessionId != null) {
+          chatSessionId = nextSessionId;
+        }
+
         isChatThinking = false;
-        String aiResponse = "";
-        String? targetSchoolId;
 
-        // Keyword analysis and profile merging
-        final delta = extractDeltaFromMessage(text);
-        delta.forEach((key, val) {
-          chatProfile[key] = (chatProfile[key] ?? 0) + val;
-        });
-        signalCount += 1;
+        // 1. Thêm đánh giá nếu có
+        if (evaluation != null && evaluation.trim().isNotEmpty) {
+          chatMessages.add(
+            ChatMessage(
+              id: 'eval-${DateTime.now().millisecondsSinceEpoch}',
+              role: 'assistant',
+              content: 'AI nhận xét: "$evaluation"',
+              kind: 'assistant_demo',
+            ),
+          );
+        }
 
-        if (isPreset && presetIndex != null) {
-          usedPromptIndexes.add(presetIndex);
+        // 2. Thêm câu trả lời dẫn dắt
+        if (aiMessage != null && aiMessage.trim().isNotEmpty) {
+          chatMessages.add(
+            ChatMessage(
+              id: 'assistant-${DateTime.now().millisecondsSinceEpoch}',
+              role: 'assistant',
+              content: aiMessage,
+              kind: isPreset ? 'assistant_recommendation_detail' : 'assistant_demo',
+            ),
+          );
+        }
 
-          // Get top matching school for preset
-          final ranked = rankUniversities(chatProfile);
-          final topSchool = ranked.first;
-          targetSchoolId = topSchool.id;
+        // 3. Thêm câu hỏi tiếp theo nếu có (tránh trùng lặp nếu AI đã gộp câu hỏi này vào lời thoại dẫn dắt)
+        if (nextQuestion != null && nextQuestion.trim().isNotEmpty) {
+          // Trích xuất phần cốt lõi của câu hỏi (loại bỏ phần ví dụ trong ngoặc đơn nếu có để tránh AI viết lược bớt ví dụ)
+          final questionCore = nextQuestion.split('(')[0].trim();
+          
+          final cleanAiMsg = (aiMessage ?? '').toLowerCase().replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '');
+          final cleanQuestionCore = questionCore.toLowerCase().replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '');
 
-          final keys = _getSchoolStrengthKeys(topSchool);
-          final strengths = keys.map((k) => focusLabelsVi[k] ?? k).join(' và ');
-
-          aiResponse =
-              '${topSchool.name["vi"]} là lựa chọn phù hợp nhất với hồ sơ hiện tại của bạn. Trường nổi bật ở nhóm ${topSchool.major["vi"]}. Khu vực: ${topSchool.place["vi"]}. Mức học phí tham khảo: ${topSchool.tuition["vi"]}. Dựa trên các tín hiệu bạn đã cung cấp, mức độ tương thích cao nhất nằm ở nhóm $strengths.';
-        } else {
-          // Free text custom keyword matching
-          final textLower = text.toLowerCase();
-          if (textLower.contains('it') || textLower.contains('công nghệ')) {
-            aiResponse =
-                'Tôi ghi nhận bạn quan tâm đến công nghệ và máy tính. ĐH Bách Khoa TP.HCM (HCMUT) và ĐH Bách Khoa Hà Nội (HUST) là hai gợi ý hàng đầu về khối kỹ thuật - công nghệ với mức độ tương thích của bạn tăng lên đáng kể.';
-          } else if (textLower.contains('học phí') ||
-              textLower.contains('tiền')) {
-            aiResponse =
-                'Mức học phí tham khảo của các trường công như ĐH Bách Khoa (HCMUT) khoảng 15-25 triệu/học kỳ, trong khi RMIT Việt Nam có học phí từ 70-95 triệu/học kỳ. Bạn có thể xem chi tiết ở khay trường đề xuất ngay phía dưới.';
-          } else if (textLower.contains('hồ chí minh') ||
-              textLower.contains('hcm')) {
-            aiResponse =
-                'Tại TP.HCM, ĐH Bách Khoa TP.HCM (HCMUT) và RMIT Việt Nam là những lựa chọn được sinh viên đánh giá tốt nhất. Bạn có muốn xem thêm chi tiết học phí của hai trường này không?';
-          } else if (textLower.contains('kinh doanh') ||
-              textLower.contains('kinh tế')) {
-            aiResponse =
-                'Đối với khối kinh doanh và thị trường, ĐH Ngoại Thương (FTU) là lựa chọn cực kỳ uy tín. RMIT cũng rất nổi bật về Quản trị Kinh doanh và Marketing.';
-          } else {
-            aiResponse =
-                'Cảm ơn bạn đã trò chuyện. Free-text chat hiện đang ở chế độ demo và hỗ trợ tư vấn các khối ngành IT, Kinh tế, Thiết kế, hoặc thông tin học phí tại TP.HCM. Bạn có thể chọn một chủ đề gợi ý nhanh ở trên để có phản hồi chi tiết.';
+          if (cleanQuestionCore.isNotEmpty && !cleanAiMsg.contains(cleanQuestionCore)) {
+            chatMessages.add(
+              ChatMessage(
+                id: 'question-${DateTime.now().millisecondsSinceEpoch}',
+                role: 'assistant',
+                content: nextQuestion,
+              ),
+            );
           }
         }
 
-        // Add Assistant Message
-        chatMessages.add(
-          ChatMessage(
-            id: 'assistant-${DateTime.now().millisecondsSinceEpoch}',
-            role: 'assistant',
-            content: aiResponse,
-            kind: isPreset
-                ? 'assistant_recommendation_detail'
-                : 'assistant_demo',
-            schoolId: targetSchoolId,
-          ),
-        );
+        activeQuickPrompts = _getQuickPromptsForQuestion(nextQuestion);
+        usedPromptIndexes.clear(); // Reset used indexes for the new question options
 
-        // Update recommendations
-        chatRecommendations = rankUniversities(chatProfile);
+        // 4. Cập nhật các trường đại học đề xuất
+        if (summary != null && summary['recommendations'] is List) {
+          final recsList = summary['recommendations'] as List;
+          chatRecommendations = recsList.map((item) {
+            return AiUniversityRecommendation.fromJson(
+              Map<String, dynamic>.from(item as Map),
+              'top3',
+            );
+          }).toList();
+          signalCount = chatRecommendations.length;
+        }
       });
-    });
-  }
-
-  List<String> _getSchoolStrengthKeys(University school) {
-    List<MapEntry<String, int>> sorted = school.affinity.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return sorted.take(2).map((e) => e.key).toList();
+    } catch (e) {
+      setState(() {
+        isChatThinking = false;
+      });
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('Gửi tin nhắn thất bại: $e'),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    }
   }
 
   @override

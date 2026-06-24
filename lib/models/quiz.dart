@@ -181,6 +181,8 @@ class AiUniversityRecommendation {
   final Map<String, String> place;
   final int matchPercent;
   final String tier; // 'top3' or 'next5'
+  final double ranking;
+  final String? avatar;
 
   const AiUniversityRecommendation({
     required this.id,
@@ -189,6 +191,8 @@ class AiUniversityRecommendation {
     required this.place,
     required this.matchPercent,
     required this.tier,
+    this.ranking = 0.0,
+    this.avatar,
   });
 
   factory AiUniversityRecommendation.fromJson(Map<String, dynamic> json, String tier) {
@@ -217,6 +221,14 @@ class AiUniversityRecommendation {
       }
     }
 
+    final rankingRaw = readProperty('ranking', 'Ranking');
+    double rankingVal = 0.0;
+    if (rankingRaw != null) {
+      rankingVal = double.tryParse(rankingRaw.toString()) ?? 0.0;
+    }
+
+    final avatarVal = readProperty('avatar', 'Avatar')?.toString();
+
     return AiUniversityRecommendation(
       id: id,
       name: {
@@ -233,6 +245,8 @@ class AiUniversityRecommendation {
       },
       matchPercent: matchVal,
       tier: tier,
+      ranking: rankingVal,
+      avatar: avatarVal,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../main.dart';
+import '../widgets/chat_history_drawer.dart';
 import 'chat_tab.dart';
 import 'home_tab.dart';
 import 'pricing_tab.dart';
@@ -16,10 +17,12 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentTabIndex = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   Widget build(BuildContext context) {
-    final user = AppState.of(context).currentUser;
+    final appState = AppState.of(context);
+    final user = appState.currentUser;
     final avatarUrl = user?.avatarUrl.trim() ?? '';
     final normalizedPlan = (user?.currentPlan ?? 'free').toLowerCase();
     final isFreePlan = normalizedPlan == 'free';
@@ -65,10 +68,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final currentIndex = _currentTabIndex >= tabs.length ? 0 : _currentTabIndex;
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: const Color(0xFF081326),
+      drawer: currentIndex == 1 ? const ChatHistoryDrawer() : null,
       appBar: AppBar(
         backgroundColor: const Color(0xFF0F1E36),
         elevation: 0,
+        leading: currentIndex == 1
+            ? IconButton(
+                icon: const Icon(Icons.history, color: Colors.white70),
+                tooltip: 'Lịch sử trò chuyện',
+                onPressed: () {
+                  AppState.of(context, listen: false).loadChatSessions();
+                  _scaffoldKey.currentState?.openDrawer();
+                },
+              )
+            : null,
         title: Text(
           titles[currentIndex],
           style: const TextStyle(
@@ -78,6 +93,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
         ),
         actions: [
+          if (currentIndex == 1)
+            IconButton(
+              icon: const Icon(Icons.add_comment_outlined, color: Colors.white70),
+              tooltip: 'Cuộc trò chuyện mới',
+              onPressed: appState.isChatThinking
+                  ? null
+                  : () {
+                      AppState.of(context, listen: false).resetChatSession();
+                    },
+            ),
           IconButton(
             icon: Container(
               height: 32,

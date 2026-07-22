@@ -57,4 +57,27 @@ class PaymentService {
       data: {'activationKey': key},
     );
   }
+
+  Future<void> registerSchool({
+    required String schoolName,
+    required String contactName,
+    required String email,
+    required String phoneNumber,
+    required int studentCount,
+    required String notes,
+    required String planId,
+  }) async {
+    await _apiClient.dio.post<void>(
+      '/api/edu/register',
+      data: {
+        'schoolName': schoolName,
+        'contactName': contactName,
+        'email': email,
+        'phoneNumber': phoneNumber,
+        'studentCount': studentCount,
+        'notes': notes,
+        'planId': planId,
+      },
+    );
+  }
 }

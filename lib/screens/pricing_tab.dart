@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/plan.dart';
 import '../services/auth_service.dart';
 import '../services/payment_service.dart';
+import '../widgets/school_register_dialog.dart';
 import 'checkout_screen.dart';
 
 class PricingTab extends StatefulWidget {
@@ -314,13 +315,17 @@ class _PricingCard extends StatelessWidget {
                 return;
               }
               if (!isFree && amount == 0) {
-                // Contact
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Vui lòng liên hệ với nhà trường để đăng ký gói này!'),
-                    backgroundColor: Color(0xFF7F8CFF),
-                  ),
-                );
+                // Contact - Open School Register Dialog
+                SchoolRegisterDialog.show(context, plan).then((success) {
+                  if (success == true && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Gửi yêu cầu thành công! 4S sẽ sớm liên hệ qua email của trường.'),
+                        backgroundColor: Color(0xFF1BE6B4),
+                      ),
+                    );
+                  }
+                });
                 return;
               }
               Navigator.of(context).push(

@@ -119,157 +119,16 @@ class ApiClient {
     return token;
   }
 
-  Future<void> clearSession() async {
+  Future<void> clearSession({String? tokenToClear}) async {
+    if (tokenToClear != null) {
+      final currentToken = await _storage.read(key: _accessTokenKey);
+      if (currentToken != tokenToClear) {
+        // The token has already changed (e.g., a new user logged in), do NOT clear it.
+        return;
+      }
+    }
     await _storage.delete(key: _accessTokenKey);
     await _cookieJar?.deleteAll();
   }
 
-  Future<List<Map<String, dynamic>>> getPlans() async {
-    final response = await dio.get<List<dynamic>>(
-      '/api/Plans',
-      options: Options(
-        extra: const {skipAuthHeaderKey: true},
-      ),
-    );
-    final data = response.data;
-    if (data == null) return [];
-    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> getQuestions() async {
-    final response = await dio.get<List<dynamic>>('/api/Questions');
-    final data = response.data;
-    if (data == null) return [];
-    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> getQuestionOptions() async {
-    final response = await dio.get<List<dynamic>>('/api/QuestionOptions');
-    final data = response.data;
-    if (data == null) return [];
-    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> getUserAnswers() async {
-    final response = await dio.get<Map<String, dynamic>>('/api/UserAnswers');
-    final data = response.data?['data'] as List<dynamic>?;
-    if (data == null) return [];
-    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
-  }
-
-  Future<void> createUserAnswer({
-    required String questionId,
-    required String answer,
-  }) async {
-    await dio.post<void>(
-      '/api/UserAnswers',
-      data: {
-        'questionId': questionId,
-        'answer': answer,
-      },
-    );
-  }
-
-  Future<void> updateUserAnswer({
-    required String questionId,
-    required String answer,
-  }) async {
-    await dio.put<void>(
-      '/api/UserAnswers',
-      data: {
-        'questionId': questionId,
-        'answer': answer,
-      },
-    );
-  }
-
-  Future<void> deleteUserAnswers() async {
-    await dio.delete<void>('/api/UserAnswers');
-  }
-
-  Future<List<Map<String, dynamic>>> getQuestionCategories() async {
-    final response = await dio.get<List<dynamic>>('/api/QuestionCategories');
-    final data = response.data;
-    if (data == null) return [];
-    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
-  }
-
-  Future<Map<String, dynamic>?> evaluateCategory(String categoryId) async {
-    final response = await dio.post<Map<String, dynamic>>(
-      '/api/AiEvaluations/evaluate/$categoryId',
-      options: Options(
-        connectTimeout: Duration.zero,
-        receiveTimeout: Duration.zero,
-      ),
-    );
-    return response.data;
-  }
-
-  Future<Map<String, dynamic>?> getCategoryEvaluation(String categoryId) async {
-    final response = await dio.get<Map<String, dynamic>>(
-      '/api/AiEvaluations/$categoryId',
-      options: Options(
-        connectTimeout: Duration.zero,
-        receiveTimeout: Duration.zero,
-      ),
-    );
-    return response.data;
-  }
-
-  Future<Map<String, dynamic>?> evaluateOverall() async {
-    final response = await dio.post<Map<String, dynamic>>(
-      '/api/UserAiSummaries/evaluate',
-      options: Options(
-        connectTimeout: Duration.zero,
-        receiveTimeout: Duration.zero,
-      ),
-    );
-    return response.data;
-  }
-
-  Future<Map<String, dynamic>?> getOverallSummary() async {
-    final response = await dio.get<Map<String, dynamic>>(
-      '/api/UserAiSummaries',
-      options: Options(
-        connectTimeout: Duration.zero,
-        receiveTimeout: Duration.zero,
-      ),
-    );
-    return response.data;
-  }
-
-  Future<Map<String, dynamic>> continueGuidedChat({
-    String? sessionId,
-    String? message,
-  }) async {
-    final response = await dio.post<Map<String, dynamic>>(
-      '/api/Chat/guided',
-      data: {
-        if (sessionId != null) 'sessionId': sessionId,
-        if (message != null) 'message': message,
-      },
-      options: Options(
-        connectTimeout: Duration.zero,
-        receiveTimeout: Duration.zero,
-      ),
-    );
-    return response.data ?? {};
-  }
-
-  Future<List<Map<String, dynamic>>> getChatSessions() async {
-    final response = await dio.get<Map<String, dynamic>>('/api/Chat/guided/sessions');
-    final data = response.data?['data'] as List<dynamic>?;
-    if (data == null) return [];
-    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
-  }
-
-  Future<Map<String, dynamic>> getChatSessionDetail(String sessionId) async {
-    final response = await dio.get<Map<String, dynamic>>('/api/Chat/guided/sessions/$sessionId');
-    return response.data?['data'] as Map<String, dynamic>? ?? {};
-  }
-
-  Future<bool> deleteChatSession(String sessionId) async {
-    final response = await dio.delete<Map<String, dynamic>>('/api/Chat/guided/sessions/$sessionId');
-    return response.data?['success'] == true;
-  }
 }

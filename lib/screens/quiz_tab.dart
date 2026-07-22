@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../models/quiz.dart';
-import '../services/api_client.dart';
+import '../services/quiz_service.dart';
 import 'quiz_results_screen.dart';
 
 
@@ -69,9 +69,9 @@ class _QuizTabState extends State<QuizTab> {
     // 1. Tải Categories và Câu hỏi từ Backend
     try {
       final results = await Future.wait([
-        ApiClient.instance.getQuestions(),
-        ApiClient.instance.getQuestionOptions(),
-        ApiClient.instance.getQuestionCategories(),
+        QuizService.instance.getQuestions(),
+        QuizService.instance.getQuestionOptions(),
+        QuizService.instance.getQuestionCategories(),
       ]);
 
       final rawQuestions = results[0];
@@ -156,7 +156,7 @@ class _QuizTabState extends State<QuizTab> {
 
     // 2. Tải câu trả lời đã lưu từ Backend
     try {
-      savedAnswerRows = await ApiClient.instance.getUserAnswers();
+      savedAnswerRows = await QuizService.instance.getUserAnswers();
     } catch (e) {
       // ignore: avoid_print
       print('Lỗi tải câu trả lời đã lưu từ Backend: $e');
@@ -183,7 +183,7 @@ class _QuizTabState extends State<QuizTab> {
       if (isCompleted && qList.isNotEmpty) {
         final lastQuestion = qList.last;
         try {
-          final evalRes = await ApiClient.instance.getCategoryEvaluation(catId);
+          final evalRes = await QuizService.instance.getCategoryEvaluation(catId);
           if (evalRes != null && evalRes['success'] == true && evalRes['data'] != null) {
             final evalData = evalRes['data'];
             final textVal = evalData is String
@@ -192,7 +192,7 @@ class _QuizTabState extends State<QuizTab> {
             restoredInsights[lastQuestion.id] = textVal;
           } else {
             // Không tìm thấy trong DB, kích hoạt sinh mới
-            final genRes = await ApiClient.instance.evaluateCategory(catId);
+            final genRes = await QuizService.instance.evaluateCategory(catId);
             if (genRes != null && genRes['success'] == true && genRes['data'] != null) {
               restoredInsights[lastQuestion.id] = genRes['data'].toString();
             }
@@ -200,7 +200,7 @@ class _QuizTabState extends State<QuizTab> {
         } catch (e) {
           // Thử gọi sinh mới, nếu không được thì báo lỗi
           try {
-            final genRes = await ApiClient.instance.evaluateCategory(catId);
+            final genRes = await QuizService.instance.evaluateCategory(catId);
             if (genRes != null && genRes['success'] == true && genRes['data'] != null) {
               restoredInsights[lastQuestion.id] = genRes['data'].toString();
             } else {
@@ -220,14 +220,14 @@ class _QuizTabState extends State<QuizTab> {
 
     if (isAllDone) {
       try {
-        final overallRes = await ApiClient.instance.getOverallSummary();
+        final overallRes = await QuizService.instance.getOverallSummary();
         if (overallRes != null && overallRes['success'] == true && overallRes['data'] != null) {
           final summaryData = overallRes['data'] as Map<String, dynamic>;
           restoredOverallSummary = summaryData['summaryText']?.toString() ?? summaryData['SummaryText']?.toString() ?? '';
           restoredAiRecommendations = _mapAiRecommendations(summaryData);
         } else {
           // Kích hoạt sinh tổng quan
-          final genOverallRes = await ApiClient.instance.evaluateOverall();
+          final genOverallRes = await QuizService.instance.evaluateOverall();
           if (genOverallRes != null && genOverallRes['success'] == true && genOverallRes['data'] != null) {
             final summaryData = genOverallRes['data'] as Map<String, dynamic>;
             restoredOverallSummary = summaryData['summaryText']?.toString() ?? summaryData['SummaryText']?.toString() ?? '';
@@ -428,7 +428,7 @@ class _QuizTabState extends State<QuizTab> {
 
     String categoryEvalText = "";
     try {
-      final evalRes = await ApiClient.instance.evaluateCategory(categoryId);
+      final evalRes = await QuizService.instance.evaluateCategory(categoryId);
       if (evalRes != null && evalRes['success'] == true && evalRes['data'] != null) {
         categoryEvalText = evalRes['data'].toString();
       } else {
@@ -462,12 +462,12 @@ class _QuizTabState extends State<QuizTab> {
 
     try {
       if (isAlreadyAnswered) {
-        await ApiClient.instance.updateUserAnswer(
+        await QuizService.instance.updateUserAnswer(
           questionId: question.id,
           answer: answerValue,
         );
       } else {
-        await ApiClient.instance.createUserAnswer(
+        await QuizService.instance.createUserAnswer(
           questionId: question.id,
           answer: answerValue,
         );
@@ -566,13 +566,13 @@ class _QuizTabState extends State<QuizTab> {
     List<AiUniversityRecommendation> recommendationsList = [];
 
     try {
-      final overallRes = await ApiClient.instance.evaluateOverall();
+      final overallRes = await QuizService.instance.evaluateOverall();
       if (overallRes != null && overallRes['success'] == true && overallRes['data'] != null) {
         final summaryData = overallRes['data'] as Map<String, dynamic>;
         overallSummaryText = summaryData['summaryText']?.toString() ?? summaryData['SummaryText']?.toString() ?? '';
         recommendationsList = _mapAiRecommendations(summaryData);
       } else {
-        final summaryRes = await ApiClient.instance.getOverallSummary();
+        final summaryRes = await QuizService.instance.getOverallSummary();
         if (summaryRes != null && summaryRes['success'] == true && summaryRes['data'] != null) {
           final summaryData = summaryRes['data'] as Map<String, dynamic>;
           overallSummaryText = summaryData['summaryText']?.toString() ?? summaryData['SummaryText']?.toString() ?? '';
@@ -581,7 +581,7 @@ class _QuizTabState extends State<QuizTab> {
       }
     } catch (_) {
       try {
-        final summaryRes = await ApiClient.instance.getOverallSummary();
+        final summaryRes = await QuizService.instance.getOverallSummary();
         if (summaryRes != null && summaryRes['success'] == true && summaryRes['data'] != null) {
           final summaryData = summaryRes['data'] as Map<String, dynamic>;
           overallSummaryText = summaryData['summaryText']?.toString() ?? summaryData['SummaryText']?.toString() ?? '';
@@ -638,7 +638,7 @@ class _QuizTabState extends State<QuizTab> {
 
   Future<void> _resetQuiz() async {
     try {
-      await ApiClient.instance.deleteUserAnswers();
+      await QuizService.instance.deleteUserAnswers();
     } catch (_) {}
 
     if (!mounted) return;

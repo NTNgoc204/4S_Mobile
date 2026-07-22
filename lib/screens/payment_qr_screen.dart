@@ -8,7 +8,7 @@ import 'package:gal/gal.dart';
 import '../main.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
-import '../services/api_client.dart';
+import '../services/payment_service.dart';
 
 class PaymentQRScreen extends StatefulWidget {
   final Map<String, dynamic> paymentInfo;
@@ -125,10 +125,7 @@ class _PaymentQRScreenState extends State<PaymentQRScreen> {
   Future<void> _cancelPaymentOnBackend() async {
     final transactionCode = widget.paymentInfo['transactionCode'] ?? widget.paymentInfo['TransactionCode'] ?? '';
     if (transactionCode.isNotEmpty) {
-      await ApiClient.instance.dio.post(
-        '/api/payment/cancel',
-        queryParameters: {'code': transactionCode},
-      );
+      await PaymentService.instance.cancelPaymentTransaction(transactionCode);
     }
   }
 

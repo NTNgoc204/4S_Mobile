@@ -1082,7 +1082,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              isEduPlan ? 'Miễn phí' : amountFormatted,
+                              isEduPlan ? 'Trường tài trợ' : amountFormatted,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,

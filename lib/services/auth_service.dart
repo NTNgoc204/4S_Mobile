@@ -248,6 +248,7 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    final tokenToClear = await _apiClient.accessToken;
     try {
       await _apiClient.dio.post<void>(
         '/api/Auth/logout',
@@ -256,7 +257,7 @@ class AuthService {
     } catch (_) {
       // Local session must be cleared even if server logout fails.
     } finally {
-      await _apiClient.clearSession();
+      await _apiClient.clearSession(tokenToClear: tokenToClear);
     }
   }
 

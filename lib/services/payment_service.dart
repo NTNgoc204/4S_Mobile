@@ -50,4 +50,11 @@ class PaymentService {
       queryParameters: {'code': transactionCode},
     );
   }
+
+  Future<void> activateEduKey(String key) async {
+    await _apiClient.dio.post<void>(
+      '/api/edu/activate',
+      data: {'activationKey': key},
+    );
+  }
 }

@@ -152,7 +152,7 @@ class AppState extends State<AppStateWrapper> {
         id: 'welcome',
         role: 'assistant',
         content:
-            'Xin chào! Tôi là Trợ lý Hướng nghiệp AI 4S. Tôi có thể giúp bạn tìm ngành học, trường phù hợp, hoặc giải đáp thắc mắc về định hướng tương lai. Bạn muốn bắt đầu từ điều gì?',
+            'Xin chào! Tôi là Trợ lý Hướng nghiệp AI. Hãy chia sẻ để tôi có thể tìm ngành học và trường đại học phù hợp nhất với bạn nhé! 😊',
         kind: 'welcome',
       ),
     );
@@ -165,6 +165,20 @@ class AppState extends State<AppStateWrapper> {
     chatSessions = [];
     isSessionsLoading = false;
     isActiveSessionLoading = false;
+  }
+
+  Future<void> _cleanupEmptySession() async {
+    final currentId = chatSessionId;
+    if (currentId != null) {
+      final hasUserMessage = chatMessages.any((msg) => msg.role == 'user');
+      if (!hasUserMessage) {
+        try {
+          await ChatService.instance.deleteChatSession(currentId);
+        } catch (_) {
+          // Silently ignore cleanup errors
+        }
+      }
+    }
   }
 
   // Authentication Actions
@@ -193,7 +207,10 @@ class AppState extends State<AppStateWrapper> {
     });
 
     _refreshTimer?.cancel();
-    await _authService.logout();
+
+    // Khởi chạy đồng thời cả hai tiến trình dọn dẹp API ngầm không làm nghẽn UI
+    _cleanupEmptySession().catchError((_) {});
+    _authService.logout().catchError((_) {});
 
     if (!mounted) return;
 
@@ -335,6 +352,9 @@ class AppState extends State<AppStateWrapper> {
   }
 
   Future<void> loadChatSessionDetail(String sessionId) async {
+    if (chatSessionId != sessionId) {
+      await _cleanupEmptySession();
+    }
     setState(() {
       isActiveSessionLoading = true;
       isChatThinking = true;
@@ -510,67 +530,25 @@ class AppState extends State<AppStateWrapper> {
     if (chatSessionId != null && chatMessages.length > 1) return;
 
     setState(() {
-      isChatThinking = true;
-    });
-
-    try {
-      // Tải danh sách câu hỏi và options động nếu chưa tải
-      if (allQuestions.isEmpty) {
-        final questions = await QuizService.instance.getQuestions();
-        final options = await QuizService.instance.getQuestionOptions();
-        allQuestions = questions;
-        allQuestionOptions = options;
-      }
-
-      final response = await ChatService.instance.continueGuidedChat(
-        sessionId: null,
-        message: null,
-      );
-
-      final newSessionId = response['sessionId']?.toString();
-      final nextQuestion = response['nextQuestionContent']?.toString();
-
-      setState(() {
-        chatSessionId = newSessionId;
-        chatMessages.clear();
-        chatMessages.add(
-          ChatMessage(
-            id: 'welcome',
-            role: 'assistant',
-            content:
-                'Xin chào! Tôi là Trợ lý Hướng nghiệp AI 4S. Tôi có thể giúp bạn tìm ngành học, trường phù hợp, hoặc giải đáp thắc mắc về định hướng tương lai. Bạn muốn bắt đầu từ điều gì?',
-            kind: 'welcome',
-          ),
-        );
-        if (nextQuestion != null && nextQuestion.trim().isNotEmpty) {
-          chatMessages.add(
-            ChatMessage(
-              id: 'question-${DateTime.now().millisecondsSinceEpoch}',
-              role: 'assistant',
-              content: nextQuestion,
-            ),
-          );
-        }
-
-        activeQuickPrompts = _getQuickPromptsForQuestion(nextQuestion);
-        chatRecommendations.clear();
-        signalCount = 0;
-        isChatThinking = false;
-      });
-    } catch (e) {
-      setState(() {
-        isChatThinking = false;
-      });
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text('Không thể khởi tạo phiên chat AI: $e'),
-          backgroundColor: const Color(0xFFD32F2F),
+      chatSessionId = null;
+      chatMessages.clear();
+      chatMessages.add(
+        ChatMessage(
+          id: 'welcome',
+          role: 'assistant',
+          content: 'Xin chào! Tôi là Trợ lý Hướng nghiệp AI. Hãy chia sẻ để tôi có thể tìm ngành học và trường đại học phù hợp nhất với bạn nhé! 😊',
+          kind: 'welcome',
         ),
       );
-    }
+      activeQuickPrompts = [];
+      chatRecommendations.clear();
+      signalCount = 0;
+      isChatThinking = false;
+    });
   }
 
   Future<void> resetChatSession() async {
+    await _cleanupEmptySession();
     setState(() {
       chatSessionId = null;
       chatMessages.clear();
@@ -621,7 +599,11 @@ class AppState extends State<AppStateWrapper> {
 
       setState(() {
         if (nextSessionId != null) {
+          final isNewSession = chatSessionId == null;
           chatSessionId = nextSessionId;
+          if (isNewSession) {
+            loadChatSessions();
+          }
         }
 
         isChatThinking = false;

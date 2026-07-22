@@ -33,10 +33,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _oldPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-
-  late String _location;
-  late double _maxTuition;
-  late String _studyMode;
+  final _eduKeyController = TextEditingController();
 
   bool _isSaving = false;
   bool _isLoggingOut = false;
@@ -48,14 +45,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _showConfirmPassword = false;
   bool _isInitialized = false;
   String? _changePasswordError;
+  bool _showEduActivation = false;
+  bool _isActivatingKey = false;
 
   List<PaymentTransaction>? _transactions;
   bool _isLoadingTransactions = false;
   String? _transactionsError;
   bool _isTransactionsExpanded = false;
-
-  static const _locations = ['TP. Hồ Chí Minh', 'Hà Nội', 'Đà Nẵng', 'Cần Thơ'];
-  static const _studyModes = ['Tiếng Việt', 'Tiếng Anh', 'Song ngữ'];
 
   final AuthService _authService = AuthService.instance;
 
@@ -95,13 +91,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _mathController = TextEditingController(text: profile.mathScore.toString());
     _englishController = TextEditingController(text: profile.englishScore.toString());
     _scienceController = TextEditingController(text: profile.scienceScore.toString());
-    _location = _locations.contains(profile.preferredLocation)
-        ? profile.preferredLocation
-        : _locations.first;
-    _maxTuition = profile.maxTuition;
-    _studyMode = _studyModes.contains(profile.studyMode)
-        ? profile.studyMode
-        : _studyModes.first;
     _isInitialized = true;
     _fetchTransactions();
   }
@@ -119,6 +108,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _oldPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
+    _eduKeyController.dispose();
     super.dispose();
   }
 
@@ -178,9 +168,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       mathScore: double.tryParse(_mathController.text) ?? 75.0,
       englishScore: double.tryParse(_englishController.text) ?? 70.0,
       scienceScore: double.tryParse(_scienceController.text) ?? 65.0,
-      preferredLocation: _location,
-      maxTuition: _maxTuition,
-      studyMode: _studyMode,
     );
 
     appState.updateUserProfile(updatedProfile);
@@ -216,6 +203,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _isChangingPassword = false;
         _changePasswordError = _authService.getErrorMessage(error);
       });
+    }
+  }
+
+  Future<void> _activateEduKey() async {
+    final key = _eduKeyController.text.trim();
+    if (key.isEmpty) return;
+
+    setState(() {
+      _isActivatingKey = true;
+    });
+
+    try {
+      await PaymentService.instance.activateEduKey(key);
+      
+      final appState = AppState.of(context, listen: false);
+      if (appState.currentUser != null) {
+        appState.upgradeSubscription('edu');
+      }
+
+      if (!mounted) return;
+      _eduKeyController.clear();
+      setState(() {
+        _isActivatingKey = false;
+        _showEduActivation = false;
+      });
+      _showSnackBar('Kích hoạt tài khoản học đường thành công.');
+      _fetchTransactions();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isActivatingKey = false;
+      });
+      _showSnackBar(AuthService.instance.getErrorMessage(error), isError: true);
     }
   }
 
@@ -289,6 +309,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 28),
                 _buildTransactionHistorySection(),
                 const SizedBox(height: 28),
+                if (currentPlan.toLowerCase() == 'free') ...[
+                  _buildEduKeyActivationSection(),
+                  const SizedBox(height: 28),
+                ],
                 _buildSectionHeader('Thông tin cá nhân', Icons.person_outline),
                 const SizedBox(height: 12),
                 _buildGlassCard(child: _buildPersonalInfoFields()),
@@ -296,10 +320,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildSectionHeader('Thông tin học tập', Icons.school_outlined),
                 const SizedBox(height: 12),
                 _buildGlassCard(child: _buildAcademicFields()),
-                const SizedBox(height: 28),
-                _buildSectionHeader('Tùy chọn học tập', Icons.settings_suggest_outlined),
-                const SizedBox(height: 12),
-                _buildGlassCard(child: _buildPreferenceFields()),
                 const SizedBox(height: 28),
                 _buildChangePasswordSection(),
                 const SizedBox(height: 32),
@@ -509,45 +529,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildPreferenceFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildDropdownField(
-          label: 'Khu vực ưu tiên',
-          value: _location,
-          items: _locations,
-          onChanged: (value) => setState(() => _location = value!),
-        ),
-        const SizedBox(height: 16),
-        _buildDropdownField(
-          label: 'Hình thức học giảng dạy',
-          value: _studyMode,
-          items: _studyModes,
-          onChanged: (value) => setState(() => _studyMode = value!),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Học phí tối đa tham khảo: ${_maxTuition.toInt()}M VNĐ/năm',
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        Slider(
-          value: _maxTuition,
-          min: 10,
-          max: 200,
-          divisions: 19,
-          activeColor: const Color(0xFFECC741),
-          inactiveColor: Colors.white10,
-          label: '${_maxTuition.toInt()} triệu/năm',
-          onChanged: (value) => setState(() => _maxTuition = value),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildChangePasswordSection() {
     return _buildGlassCard(
@@ -670,6 +652,117 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEduKeyActivationSection() {
+    return _buildGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: _isActivatingKey
+                ? null
+                : () {
+                    setState(() {
+                      _showEduActivation = !_showEduActivation;
+                    });
+                  },
+            child: Row(
+              children: [
+                const Icon(Icons.key, color: Color(0xFFECC741), size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Kích hoạt tài khoản học đường',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _showEduActivation
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  color: Colors.white70,
+                ),
+              ],
+            ),
+          ),
+          if (_showEduActivation) ...[
+            const SizedBox(height: 18),
+            const Text(
+              'Nếu nhà trường của bạn đã đăng ký dịch vụ hướng nghiệp 4S và bàn giao Mã kích hoạt (Activation Key), hãy nhập mã vào ô dưới đây để tự động nâng cấp tài khoản của bạn lên gói học đường VIP.',
+              style: TextStyle(color: Colors.white60, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _eduKeyController,
+                    textCapitalization: TextCapitalization.characters,
+                    maxLength: 12,
+                    enabled: !_isActivatingKey,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'monospace', letterSpacing: 2),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.04),
+                      hintText: 'EDU-XXXXXXXX',
+                      hintStyle: const TextStyle(color: Colors.white30),
+                      counterText: '',
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    onChanged: (val) {
+                      final upper = val.toUpperCase();
+                      if (upper != val) {
+                        _eduKeyController.value = _eduKeyController.value.copyWith(
+                          text: upper,
+                          selection: TextSelection.collapsed(offset: upper.length),
+                        );
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: _isActivatingKey ? null : _activateEduKey,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFECC741),
+                    foregroundColor: const Color(0xFF0F1E36),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: _isActivatingKey
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF0F1E36),
+                          ),
+                        )
+                      : const Text(
+                          'Kích hoạt',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                ),
+              ],
             ),
           ],
         ],

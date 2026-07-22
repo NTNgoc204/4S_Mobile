@@ -7,9 +7,16 @@ class ChatHistoryDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = AppState.of(context);
-    final sessions = appState.chatSessions;
-    final isLoading = appState.isSessionsLoading;
     final currentSessionId = appState.chatSessionId;
+    final sessions = appState.chatSessions.where((session) {
+      final sessionId = session['id']?.toString() ?? '';
+      if (sessionId == currentSessionId) {
+        final hasUserMessage = appState.chatMessages.any((msg) => msg.role == 'user');
+        return hasUserMessage;
+      }
+      return true;
+    }).toList();
+    final isLoading = appState.isSessionsLoading;
 
     return Drawer(
       backgroundColor: const Color(0xFF081326),

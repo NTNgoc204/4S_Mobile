@@ -119,7 +119,14 @@ class ApiClient {
     return token;
   }
 
-  Future<void> clearSession() async {
+  Future<void> clearSession({String? tokenToClear}) async {
+    if (tokenToClear != null) {
+      final currentToken = await _storage.read(key: _accessTokenKey);
+      if (currentToken != tokenToClear) {
+        // The token has already changed (e.g., a new user logged in), do NOT clear it.
+        return;
+      }
+    }
     await _storage.delete(key: _accessTokenKey);
     await _cookieJar?.deleteAll();
   }

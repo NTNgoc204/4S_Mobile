@@ -1,8 +1,6 @@
 import 'package:dio/dio.dart';
 
 import '../models/user.dart';
-import '../models/plan.dart';
-import '../models/payment_transaction.dart';
 import 'api_client.dart';
 
 class AuthService {
@@ -64,7 +62,7 @@ class AuthService {
     }
 
     await _apiClient.dio.post<void>(
-      '/api/auth/register-step1',
+      '/api/Auth/register-step1',
       data: {
         'email': email,
         'fullName': fullName,
@@ -87,7 +85,7 @@ class AuthService {
     required String otp,
   }) async {
     final response = await _apiClient.dio.post<Map<String, dynamic>>(
-      '/api/auth/verify-otp',
+      '/api/Auth/verify-otp',
       data: {'email': email, 'otp': otp},
       options: Options(
         extra: const {
@@ -115,7 +113,7 @@ class AuthService {
     print('AuthService.registerStep3 payload: \\$payload');
     try {
       await _apiClient.dio.post<void>(
-        '/api/auth/register-step3',
+        '/api/Auth/register-step3',
         data: payload,
         options: Options(
           extra: const {
@@ -285,20 +283,4 @@ class AuthService {
     return 'Không thể kết nối máy chủ. Vui lòng thử lại.';
   }
 
-  Future<List<PricingPlan>> getPlans() async {
-    final list = await _apiClient.getPlans();
-    return list.map((json) => PricingPlan.fromJson(json)).toList();
-  }
-
-  Future<List<PaymentTransaction>> getMyTransactionHistory() async {
-    final response = await _apiClient.dio.get<List<dynamic>>(
-      '/api/payment-history/my-history',
-    );
-    final data = response.data;
-    if (data == null) return [];
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(PaymentTransaction.fromJson)
-        .toList();
-  }
 }

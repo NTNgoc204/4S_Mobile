@@ -7,6 +7,7 @@ import '../main.dart';
 import '../models/user.dart';
 import '../models/payment_transaction.dart';
 import '../services/auth_service.dart';
+import '../services/payment_service.dart';
 import '../utils/auth_validators.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -65,7 +66,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _transactionsError = null;
     });
     try {
-      final list = await _authService.getMyTransactionHistory();
+      final list = await PaymentService.instance.getMyTransactionHistory();
       if (!mounted) return;
       setState(() {
         _transactions = list;

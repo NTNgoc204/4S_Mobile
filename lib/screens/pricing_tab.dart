@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/plan.dart';
 import '../services/auth_service.dart';
+import '../services/payment_service.dart';
 import 'checkout_screen.dart';
 
 class PricingTab extends StatefulWidget {
@@ -24,7 +25,7 @@ class _PricingTabState extends State<PricingTab> {
 
   Future<void> _fetchPlans() async {
     try {
-      final plans = await _authService.getPlans();
+      final plans = await PaymentService.instance.getPlans();
       // Sort plans so 'free' is first, then 'pro', then 'edu'
       final sortOrder = {'free': 0, 'pro': 1, 'edu': 2};
       plans.sort((a, b) => (sortOrder[a.planCode] ?? 99).compareTo(sortOrder[b.planCode] ?? 99));

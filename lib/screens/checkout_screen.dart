@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../main.dart';
 import '../models/plan.dart';
-import '../services/api_client.dart';
+import '../services/payment_service.dart';
 import 'payment_qr_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -14,7 +14,7 @@ class CheckoutScreen extends StatefulWidget {
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
-  final ApiClient _apiClient = ApiClient.instance;
+  final PaymentService _paymentService = PaymentService.instance;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -25,15 +25,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     });
 
     try {
-      final response = await _apiClient.dio.post<Map<String, dynamic>>(
-        '/api/payment/create',
-        data: {'planId': widget.plan.id},
-      );
+      final data = await _paymentService.createPaymentTransaction(widget.plan.id);
 
-      final data = response.data;
       if (!mounted) return;
 
-      if (data == null) {
+      if (data.isEmpty) {
         throw StateError('Không nhận được dữ liệu thanh toán từ máy chủ');
       }
 

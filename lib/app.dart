@@ -7,6 +7,8 @@ import 'services/api_client.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'services/auth_service.dart';
+import 'services/quiz_service.dart';
+import 'services/chat_service.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -314,7 +316,7 @@ class AppState extends State<AppStateWrapper> {
     });
 
     try {
-      final sessions = await ApiClient.instance.getChatSessions();
+      final sessions = await ChatService.instance.getChatSessions();
       setState(() {
         chatSessions = sessions;
         isSessionsLoading = false;
@@ -340,13 +342,13 @@ class AppState extends State<AppStateWrapper> {
 
     try {
       if (allQuestions.isEmpty) {
-        final questions = await ApiClient.instance.getQuestions();
-        final options = await ApiClient.instance.getQuestionOptions();
+        final questions = await QuizService.instance.getQuestions();
+        final options = await QuizService.instance.getQuestionOptions();
         allQuestions = questions;
         allQuestionOptions = options;
       }
 
-      final detail = await ApiClient.instance.getChatSessionDetail(sessionId);
+      final detail = await ChatService.instance.getChatSessionDetail(sessionId);
       
       final chatHistory = detail['chatHistory'] as List<dynamic>? ?? [];
       final summary = detail['summary'];
@@ -470,7 +472,7 @@ class AppState extends State<AppStateWrapper> {
     });
 
     try {
-      final success = await ApiClient.instance.deleteChatSession(sessionId);
+      final success = await ChatService.instance.deleteChatSession(sessionId);
       if (success) {
         scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(
@@ -480,7 +482,7 @@ class AppState extends State<AppStateWrapper> {
         );
       }
       
-      final sessions = await ApiClient.instance.getChatSessions();
+      final sessions = await ChatService.instance.getChatSessions();
       
       setState(() {
         chatSessions = sessions;
@@ -514,13 +516,13 @@ class AppState extends State<AppStateWrapper> {
     try {
       // Tải danh sách câu hỏi và options động nếu chưa tải
       if (allQuestions.isEmpty) {
-        final questions = await ApiClient.instance.getQuestions();
-        final options = await ApiClient.instance.getQuestionOptions();
+        final questions = await QuizService.instance.getQuestions();
+        final options = await QuizService.instance.getQuestionOptions();
         allQuestions = questions;
         allQuestionOptions = options;
       }
 
-      final response = await ApiClient.instance.continueGuidedChat(
+      final response = await ChatService.instance.continueGuidedChat(
         sessionId: null,
         message: null,
       );
@@ -600,13 +602,13 @@ class AppState extends State<AppStateWrapper> {
     try {
       // Đảm bảo dữ liệu câu hỏi được tải trước khi gửi tin nhắn tiếp theo
       if (allQuestions.isEmpty) {
-        final questions = await ApiClient.instance.getQuestions();
-        final options = await ApiClient.instance.getQuestionOptions();
+        final questions = await QuizService.instance.getQuestions();
+        final options = await QuizService.instance.getQuestionOptions();
         allQuestions = questions;
         allQuestionOptions = options;
       }
 
-      final response = await ApiClient.instance.continueGuidedChat(
+      final response = await ChatService.instance.continueGuidedChat(
         sessionId: chatSessionId,
         message: text,
       );

@@ -1036,6 +1036,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       decimalDigits: 0,
                     ).format(tx.amount);
 
+                    final isEduPlan = tx.planName.toUpperCase().contains('EDU');
+                    final displayCode = isEduPlan
+                        ? (tx.transactionCode.toUpperCase().startsWith('EDU-')
+                            ? tx.transactionCode.substring(4)
+                            : tx.transactionCode)
+                        : tx.transactionCode;
+
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1053,7 +1060,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Mã GD: ${tx.transactionCode}',
+                                isEduPlan ? 'Mã kích hoạt: $displayCode' : 'Mã GD: $displayCode',
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.5),
                                   fontSize: 11,

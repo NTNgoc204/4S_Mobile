@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../widgets/chat_history_drawer.dart';
+import '../widgets/feedback_dialog.dart';
 import 'chat_tab.dart';
 import 'home_tab.dart';
 import 'pricing_tab.dart';
@@ -145,6 +146,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ],
       ),
       body: tabs[currentIndex],
+      floatingActionButton: currentIndex == 1
+          ? null
+          : FloatingActionButton(
+              onPressed: () => FeedbackDialog.show(context),
+              backgroundColor: const Color(0xFF6366F1),
+              foregroundColor: Colors.white,
+              elevation: 6,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(Icons.rate_review_outlined),
+            ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(

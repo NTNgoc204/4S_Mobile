@@ -202,6 +202,7 @@ class AppState extends State<AppStateWrapper> {
       _resetChatState();
     });
     _startRefreshTimer();
+    WebStatsService().recordUserVisit(userId: profile.userId);
   }
 
   Future<void> logout() async {

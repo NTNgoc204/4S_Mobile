@@ -9,6 +9,7 @@ import 'screens/main_navigation_screen.dart';
 import 'services/auth_service.dart';
 import 'services/quiz_service.dart';
 import 'services/chat_service.dart';
+import 'services/web_stats_service.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -100,6 +101,9 @@ class AppState extends State<AppStateWrapper> {
   Future<void> _initializeAuth() async {
     await _authService.init(onSessionExpired: _handleSessionExpired);
 
+    // Tăng tổng số lượt truy cập app hôm nay
+    WebStatsService().incrementWebVisits();
+
     try {
       final restoredUser = await _authService.restoreSession();
       if (!mounted) return;
@@ -115,6 +119,7 @@ class AppState extends State<AppStateWrapper> {
 
       if (restoredUser != null) {
         _startRefreshTimer();
+        WebStatsService().recordUserVisit(userId: restoredUser.userId);
       }
     } catch (e) {
       if (!mounted) return;
@@ -197,6 +202,7 @@ class AppState extends State<AppStateWrapper> {
       _resetChatState();
     });
     _startRefreshTimer();
+    WebStatsService().recordUserVisit(userId: profile.userId);
   }
 
   Future<void> logout() async {

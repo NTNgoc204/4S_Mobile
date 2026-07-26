@@ -34,13 +34,18 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
     try {
       final activeQuestions = await FeedbackService.instance.getActiveQuestions();
       // Sort by Order ascending
-      activeQuestions.sort((a, b) => (a['order'] as num? ?? 0).compareTo(b['order'] as num? ?? 0));
+      activeQuestions.sort((a, b) {
+        final aOrder = a['order'] ?? a['Order'] ?? 0;
+        final bOrder = b['order'] ?? b['Order'] ?? 0;
+        return (aOrder as num).compareTo(bOrder as num);
+      });
       
       if (mounted) {
         setState(() {
           _questions = activeQuestions;
           for (var q in _questions) {
-            _answers[q['id'].toString()] = '';
+            final qId = (q['id'] ?? q['Id'] ?? '').toString();
+            _answers[qId] = '';
           }
           _isLoading = false;
         });
@@ -61,7 +66,10 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
 
   Future<void> _submit() async {
     // Validate that all questions are answered
-    final unanswered = _questions.any((q) => _answers[q['id'].toString()]!.trim().isEmpty);
+    final unanswered = _questions.any((q) {
+      final qId = (q['id'] ?? q['Id'] ?? '').toString();
+      return _answers[qId]!.trim().isEmpty;
+    });
     if (unanswered) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -210,10 +218,10 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: List.generate(_questions.length, (index) {
                                 final q = _questions[index];
-                                final qId = q['id'].toString();
-                                final qText = q['questionText'] ?? '';
-                                final qType = q['questionType'] ?? 'Text';
-                                final qOptions = q['options'] ?? '';
+                                final qId = (q['id'] ?? q['Id'] ?? '').toString();
+                                final qText = q['questionText'] ?? q['QuestionText'] ?? '';
+                                final qType = q['questionType'] ?? q['QuestionType'] ?? 'Text';
+                                final qOptions = q['options'] ?? q['Options'] ?? '';
 
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 20),
